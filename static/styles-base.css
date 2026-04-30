@@ -83,35 +83,6 @@ html, body {
     padding: 0 2rem;
 }
 
-.tab-button {
-    background: none;
-    border: none;
-    padding: 1rem 1.5rem;
-    cursor: pointer;
-    font-size: 0.95rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    transition: all 0.3s ease;
-    border-bottom: 3px solid transparent;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.tab-button:hover {
-    color: #bfdbfe;
-    background: rgba(59, 130, 246, 0.08);
-}
-
-.tab-button.active {
-    color: #bfdbfe;
-    border-bottom-color: var(--primary-color);
-}
-
-.tab-icon {
-    font-size: 1.1rem;
-}
-
 /* ============ Main Content ============ */
 .content {
     flex: 1;

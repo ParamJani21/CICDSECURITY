@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CICDSECURITY Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles-base.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles-components.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles-responsive.css') }}">
@@ -13,29 +14,26 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <div class="header-content">
+            <div class="header-left">
                 <h1>CI/CD Security Dashboard</h1>
             </div>
-            <div class="header-status">
-                <div class="timestamp" id="timestamp"></div>
+            <div class="header-right">
+                <nav class="tabs-nav">
+                    <button class="tab-button active" data-tab="overview">
+                        <span class="tab-icon">📊</span> Overview
+                    </button>
+                    <button class="tab-button" data-tab="repos">
+                        <span class="tab-icon">📦</span> Repositories
+                    </button>
+                    <button class="tab-button" data-tab="history">
+                        <span class="tab-icon">📜</span> Scan History
+                    </button>
+                    <button class="tab-button" data-tab="settings">
+                        <span class="tab-icon">⚙️</span> Settings
+                    </button>
+                </nav>
             </div>
         </header>
-
-        <!-- Navigation Tabs -->
-        <nav class="tabs-nav">
-            <button class="tab-button active" data-tab="overview">
-                <span class="tab-icon">📊</span> Overview
-            </button>
-            <button class="tab-button" data-tab="repos">
-                <span class="tab-icon">📦</span> Repositories
-            </button>
-            <button class="tab-button" data-tab="history">
-                <span class="tab-icon">📜</span> Scan History
-            </button>
-            <button class="tab-button" data-tab="settings">
-                <span class="tab-icon">⚙️</span> Settings
-            </button>
-        </nav>
 
         <!-- Tab Content -->
         <main class="content">
@@ -96,17 +94,20 @@
                     <div class="history-header">
                         <h2>Scan History</h2>
                         <div class="history-stats">
-                            <span class="stat-item">Total Scans: <strong>{{ history_stats.total_scans }}</strong></span>
-                            <span class="stat-item passed">Passed: <strong>{{ history_stats.passed_scans }}</strong></span>
-                            <span class="stat-item failed">Failed: <strong>{{ history_stats.failed_scans }}</strong></span>
+                            <span class="stat-item">Total Scans: <strong id="total-scans">{{ history_stats.total_scans }}</strong></span>
+                            <span class="stat-item passed">Total Findings: <strong id="total-findings">{{ history_stats.total_findings }}</strong></span>
+                            <span class="stat-item failed">Critical: <strong id="critical-issues">{{ history_stats.critical_issues }}</strong></span>
                         </div>
                     </div>
                     <div class="history-grid">
                         <div class="table-header">
+                            <div class="col-checkbox">✓</div>
                             <div class="col-time">Timestamp</div>
                             <div class="col-repo">Repository</div>
-                            <div class="col-type">Scan Type</div>
-                            <div class="col-issues">Issues</div>
+                            <div class="col-total">Total</div>
+                            <div class="col-severity">Severity</div>
+                            <div class="col-multi">Multi</div>
+                            <div class="col-action">Action</div>
                         </div>
                         <div class="history-list" id="history-list">
                             <!-- History will be loaded here -->
@@ -187,14 +188,6 @@
                 </div>
             </div>
         </main>
-
-        <!-- Footer -->
-        <footer class="footer">
-            <div class="footer-content">
-                <span>© 2024 CICDSECURITY Dashboard v1.0</span>
-                <span>Last Updated: <span id="footer-time"></span></span>
-            </div>
-        </footer>
     </div>
 
     <script src="{{ url_for('static', filename='dashboard.js') }}"></script>

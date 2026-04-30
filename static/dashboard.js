@@ -126,10 +126,9 @@ function loadTabContent(tabName) {
     sendClientLog('loadTabContent', { tabName });
     switch(tabName) {
         case 'repos':
-            // Repositories are loaded on page refresh only, not on tab switch
             break;
         case 'history':
-            loadHistory();
+            loadHistory(); // Always reload to show latest scans
             break;
         case 'settings':
             loadSettings();
@@ -298,10 +297,12 @@ function triggerManualScan(repoId, repoName, repoOwner, repoUrl, repoBranch) {
     .then(response => response.json())
     .then(data => {
         console.log('Scan triggered:', data);
-        if (data.status === 'success') {
-            sendClientLog('triggerManualScan_success', { repoId, repoName, repoOwner, repo_path: data.repo_path });
+if (data.status === 'success') {
+            sendClientLog('triggerManualScan_success', { repoId, repo_name, repoOwner, repo_path: data.repo_path });
             // Show non-blocking success notification
             showToast(`✓ Scan started for ${repoOwner}/${repoName} — cloned to: ${data.repo_path}`, 'success');
+            // Refresh history immediately after scan triggers
+            loadHistory();
         } else {
             sendClientLog('triggerManualScan_error', { repoId, message: data.message }, 'error');
             showToast(`✗ Scan failed: ${data.message}`, 'error');
@@ -316,7 +317,7 @@ function triggerManualScan(repoId, repoName, repoOwner, repoUrl, repoBranch) {
 
 function loadHistory() {
     const historyList = document.getElementById('history-list');
-    if (!historyList || historyList.innerHTML) return; // Already loaded
+    if (!historyList) return;
 
     sendClientLog('loadHistory_start');
 
@@ -326,29 +327,101 @@ function loadHistory() {
             let html = '';
             if (data.history && data.history.length > 0) {
                 data.history.forEach(scan => {
-                    const critical = scan.critical || 0;
-                    const high = scan.high || 0;
-                    const medium = scan.medium || 0;
+                    const severity = scan.severity || {};
+                    const category = scan.category || {};
+                    const multiSource = scan.multi_source || 0;
                     
-                    const issuesHtml = `
-                        <span class="issue-count critical">${critical}</span>/
-                        <span class="issue-count high">${high}</span>/
-                        <span class="issue-count medium">${medium}</span>
-                    `;
+                    const critical = severity.CRITICAL || 0;
+                    const high = severity.HIGH || 0;
+                    const medium = severity.MEDIUM || 0;
+                    const low = severity.LOW || 0;
+                    const total = scan.total_findings || 0;
                     
                     html += `
-                        <div class="table-row">
-                            <div class="col-time">${formatDate(scan.timestamp)}</div>
-                            <div class="col-repo">${scan.repository || 'N/A'}</div>
-                            <div class="col-type">${scan.scan_type || 'N/A'}</div>
-                            <div class="col-issues">${issuesHtml}</div>
-                        </div>
-                    `;
+                        <div class="history-item" data-scan-id="${scan.scan_id}">
+                            <div class="history-row" onclick="toggleScanDetails('${scan.scan_id}')">
+                                <div class="col-checkbox">
+                                    <input type="checkbox" class="scan-checkbox" data-scan-id="${scan.scan_id}" onclick="event.stopPropagation()">
+                                </div>
+                                <div class="col-time">${formatDate(scan.timestamp)}</div>
+                                <div class="col-repo">${scan.repository || 'Unknown'}</div>
+                                <div class="col-total">${total}</div>
+                                <div class="col-severity">
+                                    <span class="severity-badge critical">${critical}</span>
+                                    <span class="severity-badge high">${high}</span>
+                                    <span class="severity-badge medium">${medium}</span>
+                                    <span class="severity-badge low">${low}</span>
+                                </div>
+                                <div class="col-multi">${multiSource > 0 ? multiSource : '-'}</div>
+                                <div class="col-action">
+                                    <button class="view-detail-btn" onclick="event.stopPropagation(); toggleScanDetails('${scan.scan_id}')" title="View Details">▶</button>
+                                </div>
+                            </div>
+                            <div class="scan-details" id="details-${scan.scan_id}" style="display: none;">
+                                <div class="details-content">
+                                    <div class="details-header">
+                                        <h4>Scan: ${scan.scan_id}</h4>
+                                        <span class="repo-name">${scan.repository || 'Unknown'}</span>
+                                    </div>
+                                    <div class="details-grid">
+                                        <div class="detail-card">
+                                            <h5>Severity</h5>
+                                            <div class="detail-stat"><span class="stat-label">CRITICAL:</span><span class="stat-value critical">${critical}</span></div>
+                                            <div class="detail-stat"><span class="stat-label">HIGH:</span><span class="stat-value high">${high}</span></div>
+                                            <div class="detail-stat"><span class="stat-label">MEDIUM:</span><span class="stat-value medium">${medium}</span></div>
+                                            <div class="detail-stat"><span class="stat-label">LOW:</span><span class="stat-value low">${low}</span></div>
+                                        </div>
+                                        <div class="detail-card">
+                                            <h5>Category</h5>
+                                            <div class="detail-stat"><span class="stat-label">Secrets:</span><span class="stat-value">${category.secrets || 0}</span></div>
+                                            <div class="detail-stat"><span class="stat-label">Code:</span><span class="stat-value">${category.code || 0}</span></div>
+                                        </div>
+                                        <div class="detail-card">
+                                            <h5>Multi-Source</h5>
+                                            <div class="detail-stat highlight"><span class="stat-value">${multiSource}</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="details-files">
+                                        <div class="file-badges">
+                                            <span class="file-badge">merged.json</span>
+                                            <span class="file-badge">opengrep.json</span>
+                                            <span class="file-badge">truffle.json</span>
+                                            <span class="file-badge">trivy.json</span>
+                                        </div>
+                                    </div>
+                                    <div class="findings-list" id="findings-${scan.scan_id}">
+                                        <h5>All Findings from merged.json (${total})</h5>
+                                        <div class="findings-loading">Loading findings...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                    
+                    // Load findings via API
+                    setTimeout(() => loadScanFindings(scan.scan_id), 100);
                 });
             } else {
-                html = '<div style="grid-column: 1 / -1; padding: 2rem; text-align: center; color: #64748b;">No scan history available</div>';
+                html = '<div style="grid-column: 1 / -1; padding: 2rem; text-align: center; color: #64748b;">No scans found. Trigger a scan to see results here.</div>';
             }
             historyList.innerHTML = html;
+            
+            // Restore expanded state
+            expandedScanIds.forEach(scanId => {
+                const details = document.getElementById('details-' + scanId);
+                const btn = document.querySelector(`[data-scan-id="${scanId}"] .view-detail-btn`);
+                if (details) {
+                    details.style.display = 'block';
+                    if (btn) btn.innerHTML = '▼';
+                } else {
+                    expandedScanIds.delete(scanId);
+                }
+            });
+            
+            // Update stats
+            document.getElementById('total-scans').textContent = data.stats.total_scans || 0;
+            document.getElementById('total-findings').textContent = data.stats.total_findings || 0;
+            document.getElementById('critical-issues').textContent = data.stats.critical_issues || 0;
+            
             sendClientLog('loadHistory_success', { count: data.history ? data.history.length : 0 });
         })
         .catch(error => {
@@ -356,6 +429,78 @@ function loadHistory() {
             sendClientLog('loadHistory_error', { message: error.message || String(error) }, 'error');
         });
 }
+
+function loadScanFindings(scanId) {
+    const container = document.getElementById('findings-' + scanId);
+    if (!container) return;
+    
+    fetch('/api/history/' + scanId)
+        .then(response => response.json())
+        .then(data => {
+            const merged = data.files.merged;
+            if (!merged || !merged.findings || merged.findings.length === 0) {
+                container.innerHTML = '<h5>All Findings from merged.json</h5><p style="color:#94a3b8;font-style:italic;">No findings in merged.json</p>';
+                return;
+            }
+            
+            let findingsHtml = '<h5>All Findings from merged.json (' + merged.findings.length + ')</h5>';
+            
+            merged.findings.forEach((f, idx) => {
+                const severityClass = (f.severity || '').toLowerCase();
+                const sources = (f.sources || []).join(', ');
+                const cwe = (f.cwe || []).join(', ');
+                
+                findingsHtml += `
+                    <div class="finding-item">
+                        <div class="finding-header">
+                            <span class="finding-file">${f.file}:${f.line}</span>
+                            <span class="finding-type">${f.type || 'unknown'}</span>
+                            <span class="severity-badge ${severityClass}">${f.severity || 'INFO'}</span>
+                        </div>
+                        <div class="finding-title">${f.title || 'Untitled'}</div>
+                        ${f.message ? `<div class="finding-message">${f.message.substring(0, 200)}</div>` : ''}
+                        ${cwe ? `<div class="finding-cwe">CWE: ${cwe}</div>` : ''}
+                        <div class="source-badges">
+                            ${(f.sources || []).map(s => `<span class="source-badge">${s}</span>`).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = findingsHtml;
+        })
+        .catch(err => {
+            console.error('Error loading findings:', err);
+            container.innerHTML = '<p style="color:#94a3b8;">Error loading findings</p>';
+        });
+}
+
+let expandedScanIds = new Set();
+
+function toggleScanDetails(scanId) {
+    const details = document.getElementById('details-' + scanId);
+    const btn = document.querySelector(`[data-scan-id="${scanId}"] .view-detail-btn`);
+    
+    if (expandedScanIds.has(scanId)) {
+        expandedScanIds.delete(scanId);
+        details.style.display = 'none';
+        if (btn) btn.innerHTML = '▶';
+    } else {
+        expandedScanIds.add(scanId);
+        details.style.display = 'block';
+        if (btn) btn.innerHTML = '▼';
+    }
+}
+
+// Auto-refresh history every 5 seconds when tab is active (but skip if details are expanded)
+setInterval(() => {
+    const historyTab = document.getElementById('history-tab');
+    if (historyTab && historyTab.classList.contains('active')) {
+        if (expandedScanIds.size === 0) {
+            loadHistory();
+        }
+    }
+}, 5000);
 
 function loadSettings() {
     const form = document.getElementById('github-credentials-form');
@@ -487,13 +632,9 @@ function updateTimestamps() {
     });
 
     const timestampEl = document.getElementById('timestamp');
-    const footerTimeEl = document.getElementById('footer-time');
 
     if (timestampEl) {
         timestampEl.textContent = formattedTime;
-    }
-    if (footerTimeEl) {
-        footerTimeEl.textContent = formattedTime;
     }
 }
 

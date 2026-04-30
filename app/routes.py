@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from modules.overview import get_overview_data
 from modules.repos import get_repositories, get_repository_stats
-from modules.history import get_scan_history, get_history_stats
+from modules.history import get_scan_history, get_history_stats, get_scan_details
 from modules.settings import (get_settings, get_integration_status, 
                              get_github_credentials, save_github_credentials)
 from modules.scan_controller import trigger_scan
@@ -53,6 +53,15 @@ def api_history():
         'history': get_scan_history(),
         'stats': get_history_stats()
     })
+
+
+@bp.route('/api/history/<scan_id>')
+def api_scan_details(scan_id):
+    """API endpoint for getting detailed scan information"""
+    details = get_scan_details(scan_id)
+    if details:
+        return jsonify(details)
+    return jsonify({'error': 'Scan not found'}), 404
 
 
 @bp.route('/api/repos/scan', methods=['POST'])
