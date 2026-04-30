@@ -50,12 +50,12 @@
                         </div>
                     </div>
 
-                    <!-- Right Column: Currently Scanning Repositories -->
+                    <!-- Right Column: Active Scans -->
                     <div class="overview-column right-column">
                         <div class="summary-section">
                             <h2>Active Scans</h2>
                             <div class="scanning-repos-list" id="scanning-repos-list">
-                                <!-- Currently scanning repos will be loaded here -->
+                                <p style="color: #64748b; text-align: center; padding: 1rem;">Loading...</p>
                             </div>
                         </div>
                     </div>
@@ -97,6 +97,9 @@
                             <span class="stat-item">Total Scans: <strong id="total-scans">{{ history_stats.total_scans }}</strong></span>
                             <span class="stat-item passed">Total Findings: <strong id="total-findings">{{ history_stats.total_findings }}</strong></span>
                             <span class="stat-item failed">Critical: <strong id="critical-issues">{{ history_stats.critical_issues }}</strong></span>
+                            <button id="delete-scans-btn" class="delete-btn" style="display: none;" onclick="deleteSelectedScans()">
+                                🗑️ Delete (<span id="selected-count">0</span>)
+                            </button>
                         </div>
                     </div>
                     <div class="history-grid">

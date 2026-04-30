@@ -239,9 +239,60 @@ function loadCurrentScanningRepos() {
     const scanningReposList = document.getElementById('scanning-repos-list');
     if (!scanningReposList) return;
 
-    // Hide Active Scans section for now - can be enabled later
-    scanningReposList.parentElement.style.display = 'none';
+    // Show Active Scans section
+    scanningReposList.parentElement.style.display = 'block';
+
+    fetch('/api/overview')
+        .then(response => response.json())
+        .then(data => {
+            const activeScans = data.active_scans_list || [];
+            
+            if (activeScans.length === 0) {
+                scanningReposList.innerHTML = '<p style="color: #64748b; text-align: center; padding: 1rem;">No active scans</p>';
+                return;
+            }
+
+            let html = '';
+            activeScans.forEach(scan => {
+                const progress = scan.progress || [];
+                
+                const displayName = scan.owner ? `${scan.owner}/${scan.repo_name}` : scan.repo_name;
+                html += `
+                    <div class="active-scan-item">
+                        <div class="active-scan-header">
+                            <span class="repo-name">${displayName}</span>
+                            <span class="scan-status">Scanning...</span>
+                        </div>
+                        <div class="scan-progress-steps">
+                            ${progress.map(step => {
+                                if (step.status === 'completed') {
+                                    return `<div class="step completed">${step.done || step.label}</div>`;
+                                } else if (step.status === 'current') {
+                                    return `<div class="step current">${step.label}</div>`;
+                                } else {
+                                    return `<div class="step pending">${step.label}</div>`;
+                                }
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            scanningReposList.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error loading active scans:', error);
+            scanningReposList.innerHTML = '<p style="color: #64748b; text-align: center; padding: 1rem;">No active scans</p>';
+        });
 }
+
+// Auto-refresh active scans every 1 second for smooth tracking
+setInterval(() => {
+    const overviewTab = document.getElementById('overview-tab');
+    if (overviewTab && overviewTab.classList.contains('active')) {
+        loadCurrentScanningRepos();
+    }
+}, 1000);
 
 function loadRepositories() {
     const reposList = document.getElementById('repos-list');
@@ -407,6 +458,9 @@ function loadHistory() {
     if (!historyList) return;
 
     sendClientLog('loadHistory_start');
+    
+    // Reset delete button on refresh (checkboxes will be cleared)
+    syncDeleteButtonState();
 
     fetch('/api/history')
         .then(response => response.json())
@@ -428,7 +482,7 @@ function loadHistory() {
                         <div class="history-item" data-scan-id="${scan.scan_id}">
                             <div class="history-row" onclick="toggleScanDetails('${scan.scan_id}')">
                                 <div class="col-checkbox">
-                                    <input type="checkbox" class="scan-checkbox" data-scan-id="${scan.scan_id}" onclick="event.stopPropagation()">
+                                    <input type="checkbox" class="scan-checkbox" data-scan-id="${scan.scan_id}" onclick="event.stopPropagation(); updateDeleteButton()">
                                 </div>
                                 <div class="col-time">${formatDate(scan.timestamp)}</div>
                                 <div class="col-repo">${scan.repository || 'Unknown'}</div>
@@ -584,10 +638,123 @@ setInterval(() => {
     const historyTab = document.getElementById('history-tab');
     if (historyTab && historyTab.classList.contains('active')) {
         if (expandedScanIds.size === 0) {
-            loadHistory();
+            // Save checked state before refresh
+            const checkedIds = Array.from(document.querySelectorAll('.scan-checkbox:checked'))
+                .map(cb => cb.getAttribute('data-scan-id'));
+            
+            // Call loadHistory and restore after it completes
+            loadHistoryWithRestore(checkedIds);
         }
     }
 }, 5000);
+
+function loadHistoryWithRestore(checkedIds) {
+    const historyList = document.getElementById('history-list');
+    if (!historyList) return;
+
+    fetch('/api/history')
+        .then(response => response.json())
+        .then(data => {
+            let html = '';
+            if (data.history && data.history.length > 0) {
+                data.history.forEach(scan => {
+                    const severity = scan.severity || {};
+                    const category = scan.category || {};
+                    const multiSource = scan.multi_source || 0;
+                    
+                    const critical = severity.CRITICAL || 0;
+                    const high = severity.HIGH || 0;
+                    const medium = severity.MEDIUM || 0;
+                    const low = severity.LOW || 0;
+                    const total = scan.total_findings || 0;
+                    
+                    html += `
+                        <div class="history-item" data-scan-id="${scan.scan_id}">
+                            <div class="history-row" onclick="toggleScanDetails('${scan.scan_id}')">
+                                <div class="col-checkbox">
+                                    <input type="checkbox" class="scan-checkbox" data-scan-id="${scan.scan_id}" onclick="event.stopPropagation(); updateDeleteButton()">
+                                </div>
+                                <div class="col-time">${formatDate(scan.timestamp)}</div>
+                                <div class="col-repo">${scan.repository || 'Unknown'}</div>
+                                <div class="col-total">${total}</div>
+                                <div class="col-severity">
+                                    <span class="severity-badge critical">${critical}</span>
+                                    <span class="severity-badge high">${high}</span>
+                                    <span class="severity-badge medium">${medium}</span>
+                                    <span class="severity-badge low">${low}</span>
+                                </div>
+                                <div class="col-multi">${multiSource > 0 ? multiSource : '-'}</div>
+                                <div class="col-action">
+                                    <button class="view-detail-btn" onclick="event.stopPropagation(); toggleScanDetails('${scan.scan_id}')" title="View Details">▶</button>
+                                </div>
+                            </div>
+                            <div class="scan-details" id="details-${scan.scan_id}" style="display: none;">
+                                <div class="details-content">
+                                    <div class="details-header">
+                                        <h4>Scan: ${scan.scan_id}</h4>
+                                        <span class="repo-name">${scan.repository || 'Unknown'}</span>
+                                    </div>
+                                    <div class="details-grid">
+                                        <div class="detail-card">
+                                            <h5>Severity</h5>
+                                            <div class="detail-stat"><span class="stat-label">CRITICAL:</span><span class="stat-value critical">${critical}</span></div>
+                                            <div class="detail-stat"><span class="stat-label">HIGH:</span><span class="stat-value high">${high}</span></div>
+                                            <div class="detail-stat"><span class="stat-label">MEDIUM:</span><span class="stat-value medium">${medium}</span></div>
+                                            <div class="detail-stat"><span class="stat-label">LOW:</span><span class="stat-value low">${low}</span></div>
+                                        </div>
+                                        <div class="detail-card">
+                                            <h5>Category</h5>
+                                            <div class="detail-stat"><span class="stat-label">Secrets:</span><span class="stat-value">${category.secrets || 0}</span></div>
+                                            <div class="detail-stat"><span class="stat-label">Code:</span><span class="stat-value">${category.code || 0}</span></div>
+                                        </div>
+                                        <div class="detail-card">
+                                            <h5>Multi-Source</h5>
+                                            <div class="detail-stat highlight"><span class="stat-value">${multiSource}</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="details-files">
+                                        <div class="file-badges">
+                                            <span class="file-badge">merged.json</span>
+                                            <span class="file-badge">opengrep.json</span>
+                                            <span class="file-badge">truffle.json</span>
+                                            <span class="file-badge">trivy.json</span>
+                                        </div>
+                                    </div>
+                                    <div class="findings-list" id="findings-${scan.scan_id}">
+                                        <h5>All Findings from merged.json (${total})</h5>
+                                        <div class="findings-loading">Loading findings...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                html = '<p style="color: #64748b; text-align: center; padding: 2rem;">No scan history yet. Start scanning repositories to see results here.</p>';
+            }
+            
+            historyList.innerHTML = html;
+            
+            // Restore checked state AFTER HTML is inserted
+            if (checkedIds && checkedIds.length > 0) {
+                checkedIds.forEach(id => {
+                    const cb = document.querySelector(`.scan-checkbox[data-scan-id="${id}"]`);
+                    if (cb) cb.checked = true;
+                });
+                syncDeleteButtonState();
+            }
+            
+            // Update total scans count
+            const totalScansEl = document.getElementById('total-scans');
+            if (totalScansEl && data.stats) {
+                totalScansEl.textContent = data.stats.total_scans || 0;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading history:', error);
+            historyList.innerHTML = '<p style="color: #64748b; text-align: center; padding: 2rem;">Error loading history</p>';
+        });
+}
 
 function loadSettings() {
     const form = document.getElementById('github-credentials-form');
@@ -800,3 +967,60 @@ function animateSecurityScore() {
 
 // Run animation after page loads
 window.addEventListener('load', animateSecurityScore);
+
+// ============ Bulk Delete Functions ============
+function syncDeleteButtonState() {
+    const checkboxes = document.querySelectorAll('.scan-checkbox:checked');
+    const deleteBtn = document.getElementById('delete-scans-btn');
+    const selectedCount = document.getElementById('selected-count');
+    
+    if (deleteBtn && selectedCount) {
+        const count = checkboxes.length;
+        selectedCount.textContent = count;
+        deleteBtn.style.display = count > 0 ? 'inline-block' : 'none';
+    }
+}
+
+function updateDeleteButton() {
+    syncDeleteButtonState();
+}
+
+function deleteSelectedScans() {
+    const checkboxes = document.querySelectorAll('.scan-checkbox:checked');
+    const scanIds = Array.from(checkboxes).map(cb => cb.getAttribute('data-scan-id'));
+    
+    if (scanIds.length === 0) {
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to delete ${scanIds.length} scan(s)? This will remove all data from logs.`)) {
+        return;
+    }
+    
+    sendClientLog('delete_scans_start', { count: scanIds.length, scanIds: scanIds });
+    
+    fetch('/api/history/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scan_ids: scanIds })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            sendClientLog('delete_scans_success', { count: scanIds.length });
+            // Refresh history
+            loadHistory();
+            // Reset delete button
+            const deleteBtn = document.getElementById('delete-scans-btn');
+            if (deleteBtn) deleteBtn.style.display = 'none';
+        } else {
+            sendClientLog('delete_scans_error', { message: data.message || 'Unknown error' }, 'error');
+            alert('Failed to delete scans: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        sendClientLog('delete_scans_error', { message: error.message || String(error) }, 'error');
+        console.error('Error deleting scans:', error);
+        alert('Error deleting scans: ' + error.message);
+    });
+}

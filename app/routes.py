@@ -64,6 +64,44 @@ def api_scan_details(scan_id):
     return jsonify({'error': 'Scan not found'}), 404
 
 
+@bp.route('/api/history/delete', methods=['POST'])
+def api_delete_history():
+    """API endpoint for deleting scans"""
+    import os
+    import shutil
+    
+    data = request.get_json()
+    scan_ids = data.get('scan_ids', [])
+    
+    if not scan_ids:
+        return jsonify({'success': False, 'message': 'No scan IDs provided'}), 400
+    
+    logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs', 'tool-output')
+    deleted_count = 0
+    errors = []
+    
+    for scan_id in scan_ids:
+        scan_path = os.path.join(logs_dir, scan_id)
+        if os.path.exists(scan_path) and os.path.isdir(scan_path):
+            try:
+                shutil.rmtree(scan_path)
+                deleted_count += 1
+            except Exception as e:
+                errors.append(f"Failed to delete {scan_id}: {str(e)}")
+    
+    if deleted_count > 0:
+        return jsonify({
+            'success': True, 
+            'deleted': deleted_count,
+            'message': f'Deleted {deleted_count} scan(s)'
+        })
+    else:
+        return jsonify({
+            'success': False, 
+            'message': 'No scans were deleted. ' + '; '.join(errors) if errors else 'Scans not found'
+        }), 400
+
+
 @bp.route('/api/repos/scan', methods=['POST'])
 def api_trigger_repo_scan():
     """API endpoint for manual scan triggers."""

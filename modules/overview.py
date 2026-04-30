@@ -7,12 +7,23 @@ import json
 from datetime import datetime
 
 LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs', 'tool-output')
+TMP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tmp')
+
+SCAN_STEPS = [
+    {'id': 1, 'name': 'cloning', 'label': '🦊 Cloning repository...', 'done': '✅ Cloned'},
+    {'id': 2, 'name': 'opengrep', 'label': '🔍 Running OpenGrep scan...', 'done': '✅ OpenGrep done'},
+    {'id': 3, 'name': 'trufflehog', 'label': '🔐 Running TruffleHog scan...', 'done': '✅ TruffleHog done'},
+    {'id': 4, 'name': 'trivy', 'label': '🛡️ Running Trivy scan...', 'done': '✅ Trivy done'},
+    {'id': 5, 'name': 'saving', 'label': '💾 Saving results...', 'done': '✅ Results saved'},
+    {'id': 6, 'name': 'cleanup', 'label': '🧹 Cleaning up...', 'done': '✅ Cleanup done'}
+]
 
 def get_overview_data():
     """
     Fetches overview dashboard data including security metrics from tool-output
     """
     recent_scans = get_recent_scans(10)
+    active_scans = get_active_scans()
     
     total_critical = 0
     total_high = 0
@@ -28,18 +39,225 @@ def get_overview_data():
     
     return {
         'total_repos': 0,
-        'active_scans': 0,
+        'active_scans': len(active_scans),
         'critical_issues': total_critical,
         'high_issues': total_high,
         'medium_issues': total_medium,
         'low_issues': total_low,
         'compliance_score': calculate_security_score(total_critical, total_high, total_medium, total_low),
         'last_scan': recent_scans[0]['timestamp'] if recent_scans else None,
-        'scan_status': 'idle',
+        'scan_status': 'idle' if len(active_scans) == 0 else 'scanning',
         'security_trends': {},
         'top_vulnerabilities': [],
-        'recent_scans': recent_scans
+        'recent_scans': recent_scans,
+        'active_scans_list': active_scans
     }
+
+
+def get_active_scans():
+    """
+    Get currently active scans from tmp directory AND log detection
+    """
+    active = []
+    
+    # First: Check tmp directory
+    if os.path.exists(TMP_DIR):
+        try:
+            for owner in os.listdir(TMP_DIR):
+                owner_path = os.path.join(TMP_DIR, owner)
+                if not os.path.isdir(owner_path):
+                    continue
+                
+                for repo_name in os.listdir(owner_path):
+                    repo_path = os.path.join(owner_path, repo_name)
+                    if not os.path.isdir(repo_path):
+                        continue
+                    
+                    # Check if it's a real scan (has .git or substantial content)
+                    has_git = os.path.exists(os.path.join(repo_path, '.git'))
+                    has_content = len(os.listdir(repo_path)) > 0
+                    
+                    if has_git or has_content:
+                        progress = get_scan_progress(repo_name, owner)
+                        
+                        active.append({
+                            'repo_name': repo_name,
+                            'owner': owner,
+                            'repo_path': repo_path,
+                            'progress': progress,
+                            'started_at': get_directory_time(repo_path)
+                        })
+        except Exception as e:
+            print(f"Error detecting active scans from tmp: {e}")
+    
+    # Second: Also check logs for any scan currently in progress
+    # This catches scans that might not have created tmp dir yet or were cleaned up incorrectly
+    log_scans = get_active_scans_from_logs()
+    for scan in log_scans:
+        # Avoid duplicates
+        if not any(s['repo_name'] == scan['repo_name'] and s['owner'] == scan['owner'] for s in active):
+            active.append(scan)
+    
+    return active
+
+
+def get_active_scans_from_logs():
+    """Detect active scans from recent log activity"""
+    scans = []
+    logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
+    app_log = os.path.join(logs_dir, 'app.log')
+    
+    if not os.path.exists(app_log):
+        return scans
+    
+    try:
+        with open(app_log, 'r') as f:
+            lines = f.readlines()[-200:]
+        
+        # Check if any scan is in progress based on STEP markers
+        step_markers = ['step 1', 'step 2', 'step 3', 'step 4', 'step 5', 'step 6']
+        
+        for line in lines[-30:]:  # Last 30 lines are most recent
+            line_lower = line.lower()
+            
+            # If we see step markers in recent logs, scan is likely active
+            has_step = any(step in line_lower for step in step_markers)
+            if has_step:
+                # Try to extract repo info from log line
+                repo_info = extract_repo_from_log_line(line)
+                if repo_info:
+                    scans.append({
+                        'repo_name': repo_info['repo_name'],
+                        'owner': repo_info['owner'],
+                        'repo_path': '',
+                        'progress': determine_scan_progress_from_logs(lines),
+                        'started_at': 'In Progress'
+                    })
+                break
+                
+    except Exception as e:
+        print(f"Error detecting scans from logs: {e}")
+    
+    return scans
+
+
+def extract_repo_from_log_line(line):
+    """Extract owner/repo from log line"""
+    try:
+        # Look for patterns like "owner/repo" in logs
+        import re
+        # Match github.com/owner/repo or just owner/repo
+        patterns = [
+            r'github\.com[/:]([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)',
+            r'(?:cloning|scanning|scanned)\s+([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, line, re.IGNORECASE)
+            if match:
+                return {'owner': match.group(1), 'repo_name': match.group(2)}
+        
+        return None
+    except:
+        return None
+
+
+def get_scan_progress(repo_name, owner):
+    """Get scan progress by reading recent logs"""
+    if not repo_name or not owner:
+        return [dict(SCAN_STEPS[0], status='current')]
+    
+    logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
+    app_log = os.path.join(logs_dir, 'app.log')
+    
+    if not os.path.exists(app_log):
+        return [dict(SCAN_STEPS[0], status='current')]
+    
+    try:
+        with open(app_log, 'r') as f:
+            lines = f.readlines()[-100:]
+        
+        # Look for this specific repo in logs
+        repo_lower = repo_name.lower()
+        owner_lower = owner.lower()
+        repo_log_lines = [l for l in lines if repo_lower in l.lower() or owner_lower in l.lower()]
+        
+        if not repo_log_lines:
+            return [dict(SCAN_STEPS[0], status='current')]
+        
+        return determine_scan_progress_from_logs(repo_log_lines)
+        
+    except Exception as e:
+        print(f"Error reading log for progress: {e}")
+        return [dict(SCAN_STEPS[0], status='current')]
+
+
+def determine_scan_progress_from_logs(lines):
+    """
+    Determine scan progress from log lines
+    """
+    log_text = ''.join(lines).lower()
+    steps = []
+    
+    # Check each step
+    step_checks = [
+        ('clone', 'cloning', 'STEP 1/6'),
+        ('opengrep', 'STEP 2/6'),
+        ('trufflehog', 'STEP 3/6'),
+        ('trivy', 'STEP 4/6'),
+        ('save', 'merge', 'STEP 5/6'),
+        ('cleanup', 'STEP 6/6')
+    ]
+    
+    current_step = 0
+    completed_steps = set()
+    
+    for i, line in enumerate(lines):
+        line_lower = line.lower()
+        
+        # Track completed steps
+        if 'step 1' in line_lower or 'cloning' in line_lower:
+            completed_steps.add(0)
+            current_step = 1
+        if 'step 2' in line_lower or 'opengrep' in line_lower:
+            completed_steps.add(1)
+            current_step = 2
+        if 'step 3' in line_lower or 'trufflehog' in line_lower:
+            completed_steps.add(2)
+            current_step = 3
+        if 'step 4' in line_lower or 'trivy' in line_lower:
+            completed_steps.add(3)
+            current_step = 4
+        if 'step 5' in line_lower or 'save' in line_lower:
+            completed_steps.add(4)
+            current_step = 5
+        if 'step 6' in line_lower or 'cleanup' in line_lower:
+            completed_steps.add(5)
+            current_step = 6
+    
+    # Build progress list
+    for i, step in enumerate(SCAN_STEPS):
+        if i in completed_steps:
+            steps.append({'id': step['id'], 'name': step['name'], 'label': step['label'], 'status': 'completed'})
+        elif i == current_step or (current_step == 0 and i == 0):
+            steps.append({'id': step['id'], 'name': step['name'], 'label': step['label'], 'status': 'current'})
+        else:
+            steps.append({'id': step['id'], 'name': step['name'], 'label': step['label'], 'status': 'pending'})
+    
+    # If no steps found, show first step as current
+    if not steps:
+        steps = [dict(SCAN_STEPS[0], status='current')]
+    
+    return steps
+
+
+def get_directory_time(dir_path):
+    """Get directory creation/modification time"""
+    try:
+        stat = os.stat(dir_path)
+        return datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+    except:
+        return ''
 
 
 def get_recent_scans(limit=10):

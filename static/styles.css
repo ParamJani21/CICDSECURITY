@@ -155,6 +155,18 @@ html, body {
     border-bottom-color: #38bdf8;
 }
 
+#overview-tab.active {
+    height: 100% !important;
+    min-height: 400px;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+#overview-tab.active .overview-grid {
+    flex: 1 !important;
+    min-height: 0 !important;
+}
+
 .tab-icon {
     font-size: 1.1rem;
 }
@@ -191,18 +203,132 @@ html, body {
 
 /* ============ Overview Tab ============ */
 .overview-grid {
-    display: flex;
-    flex-direction: row;
-    gap: 1.5rem;
-    height: 100%;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 1rem;
+    height: 100% !important;
+    width: 100% !important;
     overflow-y: auto;
     overflow-x: hidden;
-    padding-right: 0.5rem;
+    padding: 0.5rem;
+    box-sizing: border-box;
 }
 
 .overview-column.left-column {
+    flex: 1 1 50% !important;
+    min-width: 0;
+    max-width: 50%;
+    padding: 0;
+    margin: 0;
+    display: flex !important;
+}
+
+.overview-column.right-column {
+    flex: 1 1 50% !important;
+    min-width: 0;
+    max-width: 50%;
+    padding: 0;
+    margin: 0;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.overview-column.left-column .summary-section,
+.overview-column.right-column .summary-section {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box;
+}
+
+.overview-column.left-column .chart-container {
+    flex: 1 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 200px;
+    position: relative;
+}
+
+.overview-column.left-column .chart-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 400px;
+}
+
+.summary-section h2 {
+    flex-shrink: 0;
+    margin-bottom: 0.5rem;
+}
+
+.scanning-repos-list {
     flex: 1;
-    width: 100%;
+    overflow-y: auto;
+    min-height: 150px;
+}
+
+/* Active Scan Items */
+.active-scan-item {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+
+.active-scan-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #334155;
+}
+
+.active-scan-header .repo-name {
+    color: #38bdf8;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.active-scan-header .scan-status {
+    color: #22c55e;
+    font-size: 0.75rem;
+    font-weight: 500;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.scan-progress-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.scan-progress-steps .step {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: #1e293b;
+    color: #64748b;
+}
+
+.scan-progress-steps .step.completed {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.scan-progress-steps .step.current {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.1);
+    border-left: 3px solid #38bdf8;
+}
+
+.scan-progress-steps .step.pending {
+    color: #64748b;
 }
 
 .overview-column.right-column {
@@ -1386,6 +1512,28 @@ html, body {
 
 .stat-item.warning strong {
     color: #64748b;
+}
+
+.delete-btn {
+    background: #dc2626;
+    color: white;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: background 0.2s, transform 0.1s;
+    margin-left: 1rem;
+}
+
+.delete-btn:hover {
+    background: #b91c1c;
+    transform: scale(1.02);
+}
+
+.delete-btn:active {
+    transform: scale(0.98);
 }
 
 .repos-list,
