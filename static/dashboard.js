@@ -142,18 +142,105 @@ function renderScansChart() {
     const ctx = document.getElementById('scansChart');
     if (!ctx) return;
 
-    // Chart will be populated from API data
-    // To be implemented with actual backend data via /api/overview
-    // Chart will display vertical stacked bar chart with repositories on x-axis
+    fetch('/api/overview')
+        .then(response => response.json())
+        .then(data => {
+            const scans = data.recent_scans || [];
+            if (scans.length === 0) {
+                ctx.parentElement.innerHTML = '<p style="color: #64748b; text-align: center; padding: 2rem;">No scans found. Run a scan to see results.</p>';
+                return;
+            }
+
+            const labels = scans.map(s => {
+                const repo = s.repository || 'Unknown';
+                return repo.length > 15 ? repo.substring(0, 12) + '...' : repo;
+            }).reverse();
+
+            const criticalData = scans.map(s => s.severity.CRITICAL || 0).reverse();
+            const highData = scans.map(s => s.severity.HIGH || 0).reverse();
+            const mediumData = scans.map(s => s.severity.MEDIUM || 0).reverse();
+            const lowData = scans.map(s => s.severity.LOW || 0).reverse();
+
+            if (window.scansChartInstance) {
+                window.scansChartInstance.destroy();
+            }
+
+            window.scansChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Critical',
+                            data: criticalData,
+                            backgroundColor: '#dc2626',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'High',
+                            data: highData,
+                            backgroundColor: '#ea580c',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Medium',
+                            data: mediumData,
+                            backgroundColor: '#ca8a04',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Low',
+                            data: lowData,
+                            backgroundColor: '#16a34a',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                color: '#94a3b8',
+                                font: { size: 11 }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Recent Scan Results (Last 10)',
+                            color: '#f1f5f9',
+                            font: { size: 14 }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: { color: '#94a3b8', font: { size: 10 } },
+                            grid: { color: '#334155' }
+                        },
+                        y: {
+                            stacked: true,
+                            ticks: { color: '#94a3b8', font: { size: 10 } },
+                            grid: { color: '#334155' },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading overview data:', error);
+        });
 }
 
 function loadCurrentScanningRepos() {
     const scanningReposList = document.getElementById('scanning-repos-list');
     if (!scanningReposList) return;
 
-    // Will be populated from API data
-    // To be implemented with actual backend data via /api/overview
-    scanningReposList.innerHTML = '<p style="color: #64748b; text-align: center; padding: 2rem 1rem;">Waiting for scan data...</p>';
+    // Hide Active Scans section for now - can be enabled later
+    scanningReposList.parentElement.style.display = 'none';
 }
 
 function loadRepositories() {
