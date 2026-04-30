@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CICDSECURITY Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles-base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles-components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles-responsive.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>CI/CD Security Dashboard</h1>
+            </div>
+            <div class="header-status">
+                <div class="timestamp" id="timestamp"></div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tabs-nav">
+            <button class="tab-button active" data-tab="overview">
+                <span class="tab-icon">📊</span> Overview
+            </button>
+            <button class="tab-button" data-tab="repos">
+                <span class="tab-icon">📦</span> Repositories
+            </button>
+            <button class="tab-button" data-tab="history">
+                <span class="tab-icon">📜</span> Scan History
+            </button>
+            <button class="tab-button" data-tab="settings">
+                <span class="tab-icon">⚙️</span> Settings
+            </button>
+        </nav>
+
+        <!-- Tab Content -->
+        <main class="content">
+            <!-- Overview Tab -->
+            <div class="tab-content active" id="overview-tab">
+                <div class="overview-grid">
+                    <!-- Left Column: Recent Scans Chart -->
+                    <div class="overview-column left-column">
+                        <div class="summary-section chart-section">
+                            <h2>Recent Scan Results</h2>
+                            <div class="chart-container">
+                                <canvas id="scansChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Currently Scanning Repositories -->
+                    <div class="overview-column right-column">
+                        <div class="summary-section">
+                            <h2>Active Scans</h2>
+                            <div class="scanning-repos-list" id="scanning-repos-list">
+                                <!-- Currently scanning repos will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Repositories Tab -->
+            <div class="tab-content" id="repos-tab">
+                <div class="repos-container">
+                    <div class="repos-header">
+                        <h2>Repository Status</h2>
+                        <div class="repos-stats">
+                            <span class="stat-item">Total: <strong>{{ repos_stats.total }}</strong></span>
+                            <span class="stat-item passed">Passed: <strong>{{ repos_stats.passed }}</strong></span>
+                            <span class="stat-item failed">Failed: <strong>{{ repos_stats.failed }}</strong></span>
+                            <span class="stat-item warning">Warning: <strong>{{ repos_stats.warning }}</strong></span>
+                        </div>
+                    </div>
+                    <div class="repos-grid">
+                        <div class="table-header">
+                            <div class="col-repo-name">Repository Name</div>
+                            <div class="col-repo-id">ID</div>
+                            <div class="col-repo-branch">Branch</div>
+                            <div class="col-repo-action">Action</div>
+                        </div>
+                        <div class="repos-list" id="repos-list">
+                            <!-- Repos will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Tab -->
+            <div class="tab-content" id="history-tab">
+                <div class="history-container">
+                    <div class="history-header">
+                        <h2>Scan History</h2>
+                        <div class="history-stats">
+                            <span class="stat-item">Total Scans: <strong>{{ history_stats.total_scans }}</strong></span>
+                            <span class="stat-item passed">Passed: <strong>{{ history_stats.passed_scans }}</strong></span>
+                            <span class="stat-item failed">Failed: <strong>{{ history_stats.failed_scans }}</strong></span>
+                        </div>
+                    </div>
+                    <div class="history-grid">
+                        <div class="table-header">
+                            <div class="col-time">Timestamp</div>
+                            <div class="col-repo">Repository</div>
+                            <div class="col-type">Scan Type</div>
+                            <div class="col-issues">Issues</div>
+                        </div>
+                        <div class="history-list" id="history-list">
+                            <!-- History will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div class="tab-content" id="settings-tab">
+                <div class="settings-container">
+                    <div class="settings-grid">
+                        <!-- GitHub Credentials -->
+                        <div class="settings-section github-settings-section">
+                            <h3>GitHub App Configuration</h3>
+                            <form id="github-credentials-form" class="github-form">
+                                <div class="form-group">
+                                    <label for="github_app_id">GitHub App ID</label>
+                                    <input 
+                                        type="text" 
+                                        id="github_app_id" 
+                                        name="github_app_id" 
+                                        placeholder="Enter your GitHub App ID"
+                                        class="form-input"
+                                    />
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="github_app_name">GitHub App Name</label>
+                                    <input 
+                                        type="text" 
+                                        id="github_app_name" 
+                                        name="github_app_name" 
+                                        placeholder="Enter your GitHub App Name"
+                                        class="form-input"
+                                    />
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="github_secret_key">GitHub Secret Key (RSA Private Key)</label>
+                                    <div class="secret-key-wrapper">
+                                        <textarea 
+                                            id="github_secret_key" 
+                                            name="github_secret_key" 
+                                            placeholder="Private key is stored securely. Click 'Replace Key' to provide a new one."
+                                            class="form-textarea"
+                                            rows="6"
+                                            readonly
+                                        ></textarea>
+                                        <div class="secret-actions">
+                                            <button type="button" id="replace-key-btn" class="btn-secondary">Replace Key</button>
+                                            <button type="button" id="cancel-replace-btn" class="btn-secondary" style="display:none;">Cancel</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="ngrok_oauth_token">Ngrok OAuth Token</label>
+                                    <input 
+                                        type="password" 
+                                        id="ngrok_oauth_token" 
+                                        name="ngrok_oauth_token" 
+                                        placeholder="Enter your Ngrok OAuth Token"
+                                        class="form-input"
+                                    />
+                                </div>
+
+                                <div class="form-actions">
+                                    <button type="submit" class="btn-save">Save Credentials</button>
+                                </div>
+
+                                <div class="form-status" id="settings-status">
+                                    <!-- Status messages will appear here -->
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <span>© 2024 CICDSECURITY Dashboard v1.0</span>
+                <span>Last Updated: <span id="footer-time"></span></span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>
