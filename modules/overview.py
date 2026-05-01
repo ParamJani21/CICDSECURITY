@@ -56,11 +56,10 @@ def get_overview_data():
 
 def get_active_scans():
     """
-    Get currently active scans from tmp directory AND log detection
+    Get currently active scans from tmp directory only
     """
     active = []
     
-    # First: Check tmp directory
     if os.path.exists(TMP_DIR):
         try:
             for owner in os.listdir(TMP_DIR):
@@ -78,25 +77,14 @@ def get_active_scans():
                     has_content = len(os.listdir(repo_path)) > 0
                     
                     if has_git or has_content:
-                        progress = get_scan_progress(repo_name, owner)
-                        
                         active.append({
                             'repo_name': repo_name,
                             'owner': owner,
                             'repo_path': repo_path,
-                            'progress': progress,
                             'started_at': get_directory_time(repo_path)
                         })
         except Exception as e:
             print(f"Error detecting active scans from tmp: {e}")
-    
-    # Second: Also check logs for any scan currently in progress
-    # This catches scans that might not have created tmp dir yet or were cleaned up incorrectly
-    log_scans = get_active_scans_from_logs()
-    for scan in log_scans:
-        # Avoid duplicates
-        if not any(s['repo_name'] == scan['repo_name'] and s['owner'] == scan['owner'] for s in active):
-            active.append(scan)
     
     return active
 

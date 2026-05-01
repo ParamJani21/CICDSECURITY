@@ -50,12 +50,12 @@
                         </div>
                     </div>
 
-                    <!-- Right Column: Active Scans -->
+                    <!-- Right Column: Scan Status -->
                     <div class="overview-column right-column">
                         <div class="summary-section">
-                            <h2>Active Scans</h2>
-                            <div class="scanning-repos-list" id="scanning-repos-list">
-                                <p style="color: #64748b; text-align: center; padding: 1rem;">Loading...</p>
+                            <h2>Scan Status</h2>
+                            <div id="scan-status-container" style="padding: 1rem; color: #64748b;">
+                                Ready to scan
                             </div>
                         </div>
                     </div>
@@ -94,6 +94,9 @@
                     <div class="history-header">
                         <h2>Scan History</h2>
                         <div class="history-stats">
+                            <button class="export-report-btn" onclick="exportReport()">
+                                📥 EXPORT REPORT
+                            </button>
                             <span class="stat-item">Total Scans: <strong id="total-scans">{{ history_stats.total_scans }}</strong></span>
                             <span class="stat-item passed">Total Findings: <strong id="total-findings">{{ history_stats.total_findings }}</strong></span>
                             <span class="stat-item failed">Critical: <strong id="critical-issues">{{ history_stats.critical_issues }}</strong></span>

@@ -118,7 +118,6 @@ function loadDynamicContent() {
     loadTabContent('overview');
     loadRepositories();
     renderScansChart();
-    loadCurrentScanningRepos();
     sendClientLog('loadDynamicContent_complete');
 }
 
@@ -138,6 +137,29 @@ function loadTabContent(tabName) {
     }
 }
 
+function updateScanStatus() {
+    fetch('/api/overview')
+        .then(res => res.json())
+        .then(data => {
+            const container = document.getElementById('scan-status-container');
+            if (!container) return;
+            
+            const activeScans = data.active_scans_list || [];
+            
+            if (activeScans.length > 0) {
+                const names = activeScans.map(s => s.owner ? `${s.owner}/${s.repo_name}` : s.repo_name).join(', ');
+                container.innerHTML = `<span style="color: #22c55e;">● Scanning: ${names}</span>`;
+            } else {
+                container.innerHTML = `<span style="color: #64748b;">✓ Ready to scan</span>`;
+            }
+        })
+        .catch(() => {});
+}
+
+// Update scan status every 3 seconds
+setInterval(updateScanStatus, 3000);
+updateScanStatus();
+
 function renderScansChart() {
     const ctx = document.getElementById('scansChart');
     if (!ctx) return;
@@ -147,7 +169,7 @@ function renderScansChart() {
         .then(data => {
             const scans = data.recent_scans || [];
             if (scans.length === 0) {
-                ctx.parentElement.innerHTML = '<p style="color: #64748b; text-align: center; padding: 2rem;">No scans found. Run a scan to see results.</p>';
+                ctx.parentElement.innerHTML = '<div style="color: #64748b; text-align: center; padding: 2rem; display: flex; flex-direction: column; justify-content: center; height: 200px;"><p>📊 No scans found yet</p><p style="font-size: 0.85rem; margin-top: 0.5rem;">Run a scan to see results</p></div>';
                 return;
             }
 
@@ -235,64 +257,7 @@ function renderScansChart() {
         });
 }
 
-function loadCurrentScanningRepos() {
-    const scanningReposList = document.getElementById('scanning-repos-list');
-    if (!scanningReposList) return;
 
-    // Show Active Scans section
-    scanningReposList.parentElement.style.display = 'block';
-
-    fetch('/api/overview')
-        .then(response => response.json())
-        .then(data => {
-            const activeScans = data.active_scans_list || [];
-            
-            if (activeScans.length === 0) {
-                scanningReposList.innerHTML = '<p style="color: #64748b; text-align: center; padding: 1rem;">No active scans</p>';
-                return;
-            }
-
-            let html = '';
-            activeScans.forEach(scan => {
-                const progress = scan.progress || [];
-                
-                const displayName = scan.owner ? `${scan.owner}/${scan.repo_name}` : scan.repo_name;
-                html += `
-                    <div class="active-scan-item">
-                        <div class="active-scan-header">
-                            <span class="repo-name">${displayName}</span>
-                            <span class="scan-status">Scanning...</span>
-                        </div>
-                        <div class="scan-progress-steps">
-                            ${progress.map(step => {
-                                if (step.status === 'completed') {
-                                    return `<div class="step completed">${step.done || step.label}</div>`;
-                                } else if (step.status === 'current') {
-                                    return `<div class="step current">${step.label}</div>`;
-                                } else {
-                                    return `<div class="step pending">${step.label}</div>`;
-                                }
-                            }).join('')}
-                        </div>
-                    </div>
-                `;
-            });
-
-            scanningReposList.innerHTML = html;
-        })
-        .catch(error => {
-            console.error('Error loading active scans:', error);
-            scanningReposList.innerHTML = '<p style="color: #64748b; text-align: center; padding: 1rem;">No active scans</p>';
-        });
-}
-
-// Auto-refresh active scans every 1 second for smooth tracking
-setInterval(() => {
-    const overviewTab = document.getElementById('overview-tab');
-    if (overviewTab && overviewTab.classList.contains('active')) {
-        loadCurrentScanningRepos();
-    }
-}, 1000);
 
 function loadRepositories() {
     const reposList = document.getElementById('repos-list');
@@ -436,9 +401,10 @@ function triggerManualScan(repoId, repoName, repoOwner, repoUrl, repoBranch) {
     .then(data => {
         console.log('Scan triggered:', data);
 if (data.status === 'success') {
-            sendClientLog('triggerManualScan_success', { repoId, repo_name, repoOwner, repo_path: data.repo_path });
+            sendClientLog('triggerManualScan_success', { repoId, repoName, repoOwner, repo_path: data.repo_path });
             // Show non-blocking success notification
-            showToast(`✓ Scan started for ${repoOwner}/${repoName} — cloned to: ${data.repo_path}`, 'success');
+            showToast(`✓ Scan started for ${repoOwner}/${repoName}`, 'success');
+            updateScanStatus();
             // Refresh history immediately after scan triggers
             loadHistory();
         } else {
@@ -983,6 +949,12 @@ function syncDeleteButtonState() {
 
 function updateDeleteButton() {
     syncDeleteButtonState();
+}
+
+function exportReport() {
+    sendClientLog('export_report_start', {});
+    
+    window.location.href = '/api/export-report';
 }
 
 function deleteSelectedScans() {

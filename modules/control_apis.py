@@ -1072,7 +1072,7 @@ def save_scan_results(scan_results, scan_id):
         return None
 
 
-def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id):
+def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, repo_name=None, repo_owner=None, repo_branch=None):
     """
     Merge findings from all 3 tools (OpenGrep, TruffleHog, Trivy) into unified structure.
     Removes duplicates by file + line + issue type, but keeps all tool sources.
@@ -1202,6 +1202,9 @@ def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id):
     merged_result = {
         'scan_id': scan_id,
         'timestamp': datetime.now().isoformat(),
+        'repo_name': repo_name,
+        'repo_owner': repo_owner,
+        'repo_branch': repo_branch,
         'summary': {
             'total_unique': len(merged_findings),
             'multi_source_findings': multi_source,
@@ -1346,7 +1349,7 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main'):
         logger.info('║ STEP 5/7: MERGING FINDINGS'.ljust(79) + '║')
         logger.info('╚' + '─' * 78 + '╝')
         
-        merged_results = merge_findings(opengrep_results, truffle_results, trivy_results, scan_id)
+        merged_results = merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, repo_name, repo_owner, repo_branch)
         logger.info(f'[Step 5] ✓ Merged: {merged_results["summary"]["total_unique"]} unique findings')
         
         # ========== STEP 6: SAVE RESULTS ==========
@@ -1359,7 +1362,10 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main'):
             'opengrep': opengrep_results,
             'truffle': truffle_results,
             'trivy': trivy_results,
-            'merged': merged_results
+            'merged': merged_results,
+            'repo_name': repo_name,
+            'repo_owner': repo_owner,
+            'repo_branch': repo_branch
         }
         
         results_dir = save_scan_results(combined_results, scan_id)

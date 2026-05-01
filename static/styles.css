@@ -221,6 +221,8 @@ html, body {
     padding: 0;
     margin: 0;
     display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 .overview-column.right-column {
@@ -231,6 +233,8 @@ html, body {
     margin: 0;
     display: flex !important;
     flex-direction: column !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 .overview-column.left-column .summary-section,
