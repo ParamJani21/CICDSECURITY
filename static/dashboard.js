@@ -371,6 +371,31 @@ function showToast(message, type = 'info', timeout = 6000) {
     }
 }
 
+function scanAllRepos() {
+    showToast('Starting scan for all repositories...', 'info');
+    
+    fetch('/api/repos/scan-all', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast(`✓ Started scanning ${data.total_repos} repositories`, 'success');
+            loadHistory();
+            updateScanStatus();
+        } else {
+            showToast(`✗ Error: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error scanning all repos:', error);
+        showToast(`✗ Error: ${error.message}`, 'error');
+    });
+}
+
 function triggerManualScan(repoId, repoName, repoOwner, repoUrl, repoBranch) {
     if (!repoId) {
         console.error('Repository ID is required');

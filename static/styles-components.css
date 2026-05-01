@@ -429,6 +429,35 @@
 .history-header h2 {
     font-size: 1.2rem;
     color: var(--text-primary);
+    margin: 0;
+}
+
+.repos-header-right {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.scan-all-btn {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.scan-all-btn:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 }
 
 .export-report-btn {

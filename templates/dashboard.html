@@ -67,11 +67,16 @@
                 <div class="repos-container">
                     <div class="repos-header">
                         <h2>Repository Status</h2>
-                        <div class="repos-stats">
-                            <span class="stat-item">Total: <strong>{{ repos_stats.total }}</strong></span>
-                            <span class="stat-item passed">Passed: <strong>{{ repos_stats.passed }}</strong></span>
-                            <span class="stat-item failed">Failed: <strong>{{ repos_stats.failed }}</strong></span>
-                            <span class="stat-item warning">Warning: <strong>{{ repos_stats.warning }}</strong></span>
+                        <div class="repos-header-right">
+                            <button class="scan-all-btn" onclick="scanAllRepos()">
+                                🔍 SCAN ALL REPOS
+                            </button>
+                            <div class="repos-stats">
+                                <span class="stat-item">Total: <strong>{{ repos_stats.total }}</strong></span>
+                                <span class="stat-item passed">Passed: <strong>{{ repos_stats.passed }}</strong></span>
+                                <span class="stat-item failed">Failed: <strong>{{ repos_stats.failed }}</strong></span>
+                                <span class="stat-item warning">Warning: <strong>{{ repos_stats.warning }}</strong></span>
+                            </div>
                         </div>
                     </div>
                     <div class="repos-grid">

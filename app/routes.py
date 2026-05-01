@@ -142,6 +142,65 @@ def api_trigger_repo_scan():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@bp.route('/api/repos/scan-all', methods=['POST'])
+def api_scan_all_repos():
+    """API endpoint to scan all repositories from GitHub App."""
+    try:
+        from modules.repos import get_repositories
+        
+        current_app.logger.info('Scan all repos requested from %s', request.remote_addr)
+        
+        # Get all repositories from GitHub App
+        repos = get_repositories()
+        
+        if not repos or len(repos) == 0:
+            return jsonify({'status': 'error', 'message': 'No repositories found'}), 404
+        
+        triggered_scans = []
+        failed_scans = []
+        
+        for repo in repos:
+            try:
+                repo_id = repo.get('id', '')
+                repo_name = repo.get('name', '')
+                repo_owner = repo.get('owner', '')
+                repo_url = repo.get('url', f'https://github.com/{repo_owner}/{repo_name}.git')
+                repo_branch = repo.get('branch', 'main')
+                
+                if not repo_id or not repo_name or not repo_owner:
+                    failed_scans.append({'repo': f"{repo.get('owner', 'unknown')}/{repo.get('name', 'unknown')}", 'error': 'Missing required fields'})
+                    continue
+                
+                # Trigger scan for this repo
+                result = trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch)
+                
+                triggered_scans.append({
+                    'repo_id': repo_id,
+                    'repo_name': repo_name,
+                    'repo_owner': repo_owner,
+                    'status': result.get('status', 'unknown'),
+                    'scan_id': result.get('scan_id', '')
+                })
+                
+                current_app.logger.info('✓ Triggered scan for %s/%s', repo_owner, repo_name)
+                
+            except Exception as scan_err:
+                current_app.logger.error('Failed to scan %s: %s', repo.get('name', 'unknown'), str(scan_err))
+                failed_scans.append({'repo': f"{repo.get('owner', 'unknown')}/{repo.get('name', 'unknown')}", 'error': str(scan_err)})
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Triggered {len(triggered_scans)} scans',
+            'total_repos': len(repos),
+            'triggered': triggered_scans,
+            'failed': failed_scans
+        })
+        
+    except Exception as e:
+        current_app.logger.exception('Error scanning all repos: %s', e)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @bp.route('/api/runtime')
 def api_runtime():
     """Return runtime information to help diagnose environment (python executable, cwd, PATH)."""
