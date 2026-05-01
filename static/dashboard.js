@@ -1034,18 +1034,38 @@ window.addEventListener('load', animateSecurityScore);
 
 // ============ Bulk Delete Functions ============
 function syncDeleteButtonState() {
-    const checkboxes = document.querySelectorAll('.scan-checkbox:checked');
+    const checkboxes = document.querySelectorAll('.scan-checkbox');
     const deleteBtn = document.getElementById('delete-scans-btn');
     const selectedCount = document.getElementById('selected-count');
+    const selectAllCheckbox = document.getElementById('select-all-scans');
+    
+    const checkedCheckboxes = document.querySelectorAll('.scan-checkbox:checked');
+    const checkedCount = checkedCheckboxes.length;
+    const totalCount = checkboxes.length;
+    
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = checkedCount > 0 && checkedCount === totalCount;
+        selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < totalCount;
+    }
     
     if (deleteBtn && selectedCount) {
-        const count = checkboxes.length;
-        selectedCount.textContent = count;
-        deleteBtn.style.display = count > 0 ? 'inline-block' : 'none';
+        selectedCount.textContent = checkedCount;
+        deleteBtn.style.display = checkedCount > 0 ? 'inline-block' : 'none';
     }
 }
 
 function updateDeleteButton() {
+    syncDeleteButtonState();
+}
+
+function toggleSelectAllScans() {
+    const selectAllCheckbox = document.getElementById('select-all-scans');
+    const checkboxes = document.querySelectorAll('.scan-checkbox');
+    
+    checkboxes.forEach(cb => {
+        cb.checked = selectAllCheckbox.checked;
+    });
+    
     syncDeleteButtonState();
 }
 

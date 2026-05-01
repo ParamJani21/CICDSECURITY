@@ -45,7 +45,7 @@ def get_scan_history():
                 'repository': 'Unknown',
                 'status': 'unknown',
                 'total_findings': 0,
-                ' severity': {},
+                'severity': {},
                 'category': {},
                 'multi_source': 0,
                 'has_merged': os.path.exists(merged_file),
