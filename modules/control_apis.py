@@ -879,15 +879,13 @@ def run_trivy_scan(repo_path, scan_id):
         
         logger.info(f'[Trivy] ✓ Found trivy at {tool_path.strip()}')
 
-        # Run Trivy scan - scan filesystem for vulnerabilities
-        logger.info('[Trivy] Starting filesystem vulnerability scan...')
+        # Run Trivy SBOM scan only - no vulnerability scanning
+        logger.info('[Trivy] Starting SBOM scan (no vulnerability scan)...')
 
         trivy_cmd = (
             f'cd {wsl_repo_path} && '
-            f'trivy fs '
-            f'--format json '
-            f'--exit-code 0 '
-            f'--no-progress '
+            f'trivy sbom '
+            f'--format cyclonedx '
             f'. 2>&1 || true'
         )
 
@@ -910,9 +908,9 @@ def run_trivy_scan(repo_path, scan_id):
             'status': 'completed'
         }
 
-        # Parse JSON output robustly - handle both Vulnerabilities AND Secrets
-        vulnerabilities = []
-        secrets = []
+        # Parse SBOM output (CycloneDX format)
+        sbom_components = []
+        dependencies = []
         try:
             if stdout and stdout.strip():
                 try:
@@ -926,60 +924,32 @@ def run_trivy_scan(repo_path, scan_id):
                     json_str = '\n'.join(lines[json_start:])
                     parsed = json.loads(json_str)
                     
-                    # Trivy returns Results array
-                    if isinstance(parsed, dict) and 'Results' in parsed:
-                        results = parsed.get('Results', []) or []
-                        for result in results:
-                            if isinstance(result, dict):
-                                # Get Vulnerabilities
-                                vulns = result.get('Vulnerabilities', []) or []
-                                vulnerabilities.extend(vulns)
-                                # Get Secrets
-                                secs = result.get('Secrets', []) or []
-                                secrets.extend(secs)
-                    elif isinstance(parsed, list):
-                        vulnerabilities = parsed
+                    # CycloneDX SBOM format has components and dependencies
+                    if isinstance(parsed, dict):
+                        sbom_components = parsed.get('components', []) or []
+                        dependencies = parsed.get('dependencies', []) or []
                 except Exception as parse_err:
-                    logger.warning(f'[Trivy] Error parsing JSON: {parse_err}')
-                    # Try line-wise parsing
-                    json_lines = []
-                    for line in stdout.splitlines():
-                        line = line.strip()
-                        if line and line.startswith('{'):
-                            try:
-                                obj = json.loads(line)
-                                json_lines.append(obj)
-                            except Exception:
-                                continue
-                    # Check for results in parsed lines
-                    for obj in json_lines:
-                        if isinstance(obj, dict) and 'Results' in obj:
-                            for r in obj.get('Results', []):
-                                vulnerabilities.extend(r.get('Vulnerabilities', []))
-                                secrets.extend(r.get('Secrets', []))
+                    logger.warning(f'[Trivy] Error parsing SBOM JSON: {parse_err}')
             else:
-                vulnerabilities = []
-                secrets = []
+                sbom_components = []
+                dependencies = []
         except Exception as e:
-            logger.warning(f'[Trivy] Error parsing output: {e}')
-            vulnerabilities = []
-            secrets = []
+            logger.warning(f'[Trivy] Error parsing SBOM output: {e}')
+            sbom_components = []
+            dependencies = []
 
-        # Combine vulnerabilities and secrets
-        all_results = vulnerabilities + secrets
-        scan_results['results'] = all_results
-        scan_results['findings_count'] = len(all_results)
-        scan_results['vulnerabilities_count'] = len(vulnerabilities)
-        scan_results['secrets_count'] = len(secrets)
+        # Store SBOM data
+        scan_results['sbom_components'] = sbom_components
+        scan_results['dependencies'] = dependencies
+        scan_results['findings_count'] = len(sbom_components)
+        scan_results['components_count'] = len(sbom_components)
+        scan_results['dependencies_count'] = len(dependencies)
 
-        if vulnerabilities:
-            logger.info(f'[Trivy] ✓ Found {len(vulnerabilities)} vulnerabilities')
-        else:
-            logger.info('[Trivy] ✓ No vulnerabilities found')
+        logger.info(f'[Trivy] ✓ SBOM generated with {len(sbom_components)} components')
 
         logger.info('=' * 80)
-        logger.info(f'✅ TRIVY SCAN COMPLETE: {scan_id}')
-        logger.info(f'   Findings: {scan_results.get("findings_count", 0)}')
+        logger.info(f'✅ TRIVY SBOM COMPLETE: {scan_id}')
+        logger.info(f'   Components: {scan_results.get("components_count", 0)}')
         logger.info('=' * 80)
 
         return True, scan_results
@@ -1213,35 +1183,11 @@ def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id):
         seen_issues[key] = merged_findings[-1]
         finding_id += 1
     
-    # Process Trivy
-    for finding in (trivy_results.get('results', []) or []):
-        for secret in (finding.get('Secrets', []) or []):
-            target = finding.get('Target', 'unknown')
-            line = secret.get('StartLine', 0)
-            issue_type = 'secret'
-            key = f"{target}:{line}:{issue_type}"
-            
-            if key in seen_issues:
-                existing = seen_issues[key]
-                if 'trivy' not in existing['sources']:
-                    existing['sources'].append('trivy')
-                continue
-            
-            merged_findings.append({
-                'id': str(finding_id),
-                'file': target,
-                'line': line,
-                'type': issue_type,
-                'title': secret.get('Title', secret.get('RuleID', '')),
-                'message': f"{secret.get('Category', '')}: {secret.get('Title', '')}",
-                'severity': 'HIGH',
-                'category': 'secrets',
-                'cwe': [],
-                'sources': ['trivy'],
-                'details': {'trivy': {'rule_id': secret.get('RuleID', '')}}
-            })
-            seen_issues[key] = merged_findings[-1]
-            finding_id += 1
+    # Process Trivy SBOM (only adds component count, no findings to merge)
+    sbom_components = trivy_results.get('sbom_components', []) or []
+    sbom_count = len(sbom_components)
+    if sbom_count > 0:
+        logger.info(f'[Merge] Trivy SBOM: {sbom_count} components detected')
     
     # Summary
     severity_counts = {'CRITICAL': 0, 'MEDIUM': 0, 'LOW': 0}
@@ -1392,7 +1338,7 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main'):
                 'results': []
             }
         
-        logger.info(f'[Step 3] ✓ Trivy complete: {trivy_results.get("findings_count", 0)} vulnerabilities')
+        logger.info(f'[Step 3] ✓ Trivy SBOM complete: {trivy_results.get("findings_count", 0)} components')
         
         # ========== STEP 5: MERGE FINDINGS ==========
         logger.info('')
@@ -1464,7 +1410,7 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main'):
         logger.info(f'--- TOOL BREAKDOWN ---')
         logger.info(f'OpenGrep: {opengrep_results.get("findings_count", 0)}')
         logger.info(f'Trivy: {trivy_results.get("findings_count", 0)}')
-        logger.info(f'Trivy vulnerabilities: {trivy_results.get("findings_count", 0)}')
+        logger.info(f'Trivy SBOM components: {trivy_results.get("findings_count", 0)}')
         logger.info(f'Results: {results_dir}')
         logger.info('')
         

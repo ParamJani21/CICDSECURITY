@@ -34,7 +34,9 @@
 cd /mnt/e/onlydash_CICDSECURITY/CICDSECURITY
 python3 run.py
 # Listens on http://localhost:5000 by default
+# Note: use_reloader=False in run.py to prevent inotify file-system spam on WSL
 ```
+**USER ONLY WILL RUN THE PYTHON APP.PY COMMAND**
 
 **Logs:**
 - Console output + file: `logs/app.log`
@@ -69,6 +71,7 @@ Endpoint: `app/routes.py:58` → calls `trigger_scan()` from `modules/control_ap
 5. **SAVE RESULTS** → Combine all three outputs, store metadata in `logs/tool-output/{scan_id}/`
 6. **CLEANUP** (`cleanup_cloned_repo` line 505) → Remove cloned repo from `/tmp/`
 
+**TRIVY ONLY SUPPOSE TO DO SBOM SCAN, NO VULNERABILITY SCANNING**
 **Key quirks:**
 - OpenGrep/clone failure stops workflow
 - TruffleHog/Trivy failure doesn't stop workflow (returns skipped if tool unavailable)
@@ -138,19 +141,16 @@ wsl brew install trufflesecurity/tap/trufflehog
 
 ---
 
-## Trivy Configuration
+## Trivy Configuration (SBOM Only)
 
-**Modified per TRIVY_SBOM_CONFIG.md** (line 804 in control_apis.py):
+**SBOM only - no vulnerability scanning** (line 882 in control_apis.py):
 ```bash
-trivy fs \
-  --format json \
-  --scanners vuln,misconfig,license \
-  --exit-code 0 \
-  --no-progress \
-  .
+trivy sbom \
+  --format cyclonedx \
+  . 2>&1 || true
 ```
 
-**Disabled:** secret scanning (requirement, not a bug). Modify line 804 if needed.
+Trivy now generates SBOM (Software Bill of Materials) in CycloneDX format. Results stored in `sbom_components` array with component count in `findings_count`. No vulnerability scanning.
 
 ---
 
@@ -161,7 +161,7 @@ trivy fs \
 - **Auth:** PyJWT 2.8.1 (GitHub App), cryptography 41.0.7
 - **HTTP:** requests 2.31.0
 - **External tools:** Git, Trivy, OpenGrep, TruffleHog (called via WSL)
-- **.env:** GitHub app credentials (app ID, RSA private key)
+- **.env:** GitHub app credentials (app ID: 3056984, app name: SECURITY, RSA private key)
 
 ---
 
@@ -183,7 +183,7 @@ trivy fs \
 2. **GitHub App token expiration:** JWT hardcoded to 5 min; if API calls timeout, token likely expired. See `get_github_app_token()`.
 3. **RSA key format:** `.env` stores key with escaped `\n`. env_config.py must restore them; verify in logs if auth fails.
 4. **TruffleHog not installed:** If TruffleHog missing in WSL, scan marked `skipped` but continues. Install via go or brew in WSL.
-5. **Trivy disabled secret scanning:** Not a misconfiguration; by design (TRIVY_SBOM_CONFIG.md). TruffleHog handles secrets instead.
+5. **Trivy SBOM only:** Trivy now generates SBOM (CycloneDX) instead of vulnerability scans. No vuln/misconfig/license scanning - SBOM components only.
 6. **Cleanup doesn't re-run:** If a scan fails mid-execution, `/tmp/{owner}/{name}` may persist. Manual cleanup may be needed.
 7. **No tests:** No pytest/unittest suite. Verify changes by triggering a scan via API and checking logs + `logs/tool-output/` output.
 
