@@ -544,15 +544,22 @@ function loadScanFindings(scanId) {
     fetch('/api/history/' + scanId)
         .then(response => response.json())
         .then(data => {
-            const merged = data.files.merged;
-            if (!merged || !merged.findings || merged.findings.length === 0) {
-                container.innerHTML = '<h5>All Findings from merged.json</h5><p style="color:#94a3b8;font-style:italic;">No findings in merged.json</p>';
+            // Handle both response formats
+            let findings = [];
+            if (data.files && data.files.merged && data.files.merged.findings) {
+                findings = data.files.merged.findings;
+            } else if (data.findings) {
+                findings = data.findings;
+            }
+            
+            if (!findings || findings.length === 0) {
+                container.innerHTML = '<h5>All Findings from merged.json</h5><p style="color:#94a3b8;font-style:italic;">No findings found</p>';
                 return;
             }
             
-            let findingsHtml = '<h5>All Findings from merged.json (' + merged.findings.length + ')</h5>';
+            let findingsHtml = '<h5>All Findings from merged.json (' + findings.length + ')</h5>';
             
-            merged.findings.forEach((f, idx) => {
+            findings.forEach((f, idx) => {
                 const severityClass = (f.severity || '').toLowerCase();
                 const sources = (f.sources || []).join(', ');
                 const cwe = (f.cwe || []).join(', ');
