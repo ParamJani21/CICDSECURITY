@@ -112,6 +112,7 @@ def api_trigger_repo_scan():
         repo_owner = payload.get('repo_owner')
         repo_url = payload.get('repo_url')
         repo_branch = payload.get('repo_branch', 'main')
+        scan_types = payload.get('scan_types', ['sats', 'sbom', 'secret'])
 
         if not repo_id:
             return jsonify({'status': 'error', 'message': 'repo_id is required'}), 400
@@ -122,11 +123,11 @@ def api_trigger_repo_scan():
         if not repo_url:
             repo_url = f'https://github.com/{repo_owner}/{repo_name}.git'
 
-        current_app.logger.info('Manual scan requested for repo_id=%s (%s/%s) from %s', 
-                               repo_id, repo_owner, repo_name, request.remote_addr)
+        current_app.logger.info('Manual scan requested for repo_id=%s (%s/%s) from %s | scan_types=%s', 
+                               repo_id, repo_owner, repo_name, request.remote_addr, scan_types)
         
         # Trigger the actual scan using the controller
-        result = trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch)
+        result = trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch, scan_types)
         
         current_app.logger.info('[RESULT] Status: %s | Message: %s | Keys: %s', 
                                result.get('status'), result.get('message'), list(result.keys()))
@@ -148,7 +149,10 @@ def api_scan_all_repos():
     try:
         from modules.repos import get_repositories
         
-        current_app.logger.info('Scan all repos requested from %s', request.remote_addr)
+        payload = request.get_json(silent=True) or {}
+        scan_types = payload.get('scan_types', ['sats', 'sbom', 'secret'])
+        
+        current_app.logger.info('Scan all repos requested from %s | scan_types=%s', request.remote_addr, scan_types)
         
         # Get all repositories from GitHub App
         repos = get_repositories()
@@ -172,7 +176,7 @@ def api_scan_all_repos():
                     continue
                 
                 # Trigger scan for this repo
-                result = trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch)
+                result = trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch, scan_types)
                 
                 triggered_scans.append({
                     'repo_id': repo_id,

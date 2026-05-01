@@ -371,14 +371,99 @@ function showToast(message, type = 'info', timeout = 6000) {
     }
 }
 
-function scanAllRepos() {
-    showToast('Starting scan for all repositories...', 'info');
+// ============ Scan Modal Functions ============
+let pendingScanRepos = [];
+let isScanAllMode = false;
+
+function openScanModal(repos, isAll = false) {
+    pendingScanRepos = repos;
+    isScanAllMode = isAll;
+    const modal = document.getElementById('scan-options-modal');
+    if (modal) {
+        modal.classList.add('show');
+    }
+}
+
+function closeScanModal() {
+    const modal = document.getElementById('scan-options-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+function getSelectedScanTypes() {
+    const scanTypes = [];
+    if (document.getElementById('scan-sats')?.checked) scanTypes.push('sats');
+    if (document.getElementById('scan-sbom')?.checked) scanTypes.push('sbom');
+    if (document.getElementById('scan-secret')?.checked) scanTypes.push('secret');
+    return scanTypes;
+}
+
+function confirmScan() {
+    const scanTypes = getSelectedScanTypes();
+    
+    if (scanTypes.length === 0) {
+        showToast('Please select at least one scan type', 'error');
+        return;
+    }
+    
+    closeScanModal();
+    
+    if (isScanAllMode) {
+        startScanAllRepos(scanTypes);
+    } else if (pendingScanRepos.length > 0) {
+        startSingleRepoScan(pendingScanRepos[0], scanTypes);
+    }
+    
+    pendingScanRepos = [];
+    isScanAllMode = false;
+}
+
+function startSingleRepoScan(repo, scanTypes) {
+    sendClientLog('triggerManualScan_start', { repoId: repo.id, repoName: repo.name, scanTypes });
+    
+    fetch('/api/repos/scan', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+            repo_id: repo.id,
+            repo_name: repo.name,
+            repo_owner: repo.owner,
+            repo_url: repo.url || `https://github.com/${repo.owner}/${repo.name}.git`,
+            repo_branch: repo.branch || 'main',
+            scan_types: scanTypes
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            sendClientLog('triggerManualScan_success', { repoId: repo.id, repoName: repo.name, repo_path: data.repo_path });
+            showToast(`✓ Scan completed for ${repo.owner}/${repo.name}`, 'success');
+            updateScanStatus();
+            loadHistory();
+        } else {
+            sendClientLog('triggerManualScan_error', { repoId: repo.id, message: data.message }, 'error');
+            showToast(`✗ Scan failed: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error triggering scan:', error);
+        sendClientLog('triggerManualScan_error', { repoId: repo.id, message: error.message || String(error) }, 'error');
+        showToast(`✗ Error: ${error.message || 'Failed to trigger scan'}`, 'error');
+    });
+}
+
+function startScanAllRepos(scanTypes) {
+    showToast(`Starting scan for all repositories... (${scanTypes.join(', ')})`, 'info');
     
     fetch('/api/repos/scan-all', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ scan_types: scanTypes })
     })
     .then(response => response.json())
     .then(data => {
@@ -396,52 +481,19 @@ function scanAllRepos() {
     });
 }
 
-function triggerManualScan(repoId, repoName, repoOwner, repoUrl, repoBranch) {
-    if (!repoId) {
-        console.error('Repository ID is required');
-        return;
-    }
-    
-    if (!repoName || !repoOwner) {
-        console.error('Repository name and owner are required');
-        return;
-    }
+function scanAllRepos() {
+    openScanModal([], true);
+}
 
-    // Trigger manual scan via API
-    sendClientLog('triggerManualScan_start', { repoId, repoName, repoOwner });
-    fetch('/api/repos/scan', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-            repo_id: repoId,
-            repo_name: repoName,
-            repo_owner: repoOwner,
-            repo_url: repoUrl || `https://github.com/${repoOwner}/${repoName}.git`,
-            repo_branch: repoBranch || 'main'
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        console.log('Scan triggered:', data);
-if (data.status === 'success') {
-            sendClientLog('triggerManualScan_success', { repoId, repoName, repoOwner, repo_path: data.repo_path });
-            // Show non-blocking success notification
-            showToast(`✓ Scan started for ${repoOwner}/${repoName}`, 'success');
-            updateScanStatus();
-            // Refresh history immediately after scan triggers
-            loadHistory();
-        } else {
-            sendClientLog('triggerManualScan_error', { repoId, message: data.message }, 'error');
-            showToast(`✗ Scan failed: ${data.message}`, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error triggering scan:', error);
-        sendClientLog('triggerManualScan_error', { repoId, message: error.message || String(error) }, 'error');
-        showToast(`✗ Error: ${error.message || 'Failed to trigger scan'}`, 'error');
-    });
+function triggerManualScan(repoId, repoName, repoOwner, repoUrl, repoBranch) {
+    const repo = {
+        id: repoId,
+        name: repoName,
+        owner: repoOwner,
+        url: repoUrl,
+        branch: repoBranch || 'main'
+    };
+    openScanModal([repo], false);
 }
 
 function loadHistory() {
@@ -564,17 +616,31 @@ function loadHistory() {
 
 function loadScanFindings(scanId) {
     const container = document.getElementById('findings-' + scanId);
-    if (!container) return;
+    if (!container) {
+        console.log('Container not found for:', 'findings-' + scanId);
+        return;
+    }
+    
+    console.log('Loading findings for:', scanId);
     
     fetch('/api/history/' + scanId)
         .then(response => response.json())
         .then(data => {
             // Handle both response formats
             let findings = [];
-            if (data.files && data.files.merged && data.files.merged.findings) {
-                findings = data.files.merged.findings;
+            if (data.files && data.files.merged) {
+                const merged = data.files.merged;
+                if (Array.isArray(merged.findings)) {
+                    findings = merged.findings;
+                } else if (merged.findings && typeof merged.findings === 'object') {
+                    findings = Object.values(merged.findings);
+                }
             } else if (data.findings) {
-                findings = data.findings;
+                findings = Array.isArray(data.findings) ? data.findings : Object.values(data.findings);
+            }
+            
+            if (!Array.isArray(findings)) {
+                findings = [];
             }
             
             if (!findings || findings.length === 0) {

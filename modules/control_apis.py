@@ -1229,7 +1229,7 @@ def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, re
     return merged_result
 
 
-def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main'):
+def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main', scan_types=None):
     """
     Main entry point - Complete scan workflow (clone -> scan -> save -> cleanup)
     
@@ -1239,12 +1239,21 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main'):
         repo_owner: Repository owner
         repo_url: Repository URL
         repo_branch: Branch to scan (default: main)
+        scan_types: List of scan types to run ['sats', 'sbom', 'secret'], default all
     
     Returns:
         Dict with status and scan details
     """
+    if scan_types is None:
+        scan_types = ['sats', 'sbom', 'secret']
+    
     scan_id = generate_scan_id()
     clone_path = None
+    
+    # Set default empty results for each scan type
+    opengrep_results = {'status': 'skipped', 'findings_count': 0, 'results': []}
+    truffle_results = {'status': 'skipped', 'findings_count': 0, 'results': []}
+    trivy_results = {'status': 'skipped', 'findings_count': 0, 'results': []}
     
     try:
         logger.info('')
@@ -1255,11 +1264,12 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main'):
         logger.info(f'Repository: {repo_owner}/{repo_name} (ID: {repo_id})')
         logger.info(f'Branch: {repo_branch}')
         logger.info(f'URL: {repo_url}')
+        logger.info(f'Scan Types: {scan_types}')
         
         # ========== STEP 1: CLONE ==========
         logger.info('')
         logger.info('╔' + '─' * 78 + '╗')
-        logger.info('║ STEP 1/4: CLONING REPOSITORY'.ljust(79) + '║')
+        logger.info('║ STEP 1/6: CLONING REPOSITORY'.ljust(79) + '║')
         logger.info('╚' + '─' * 78 + '╝')
         
         clone_result = clone_repository(repo_id, repo_name, repo_owner, repo_url, repo_branch)
@@ -1279,83 +1289,90 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main'):
         clone_path = clone_details.get('clone_path', None)
         logger.info(f'[Step 1] ✓ Clone successful: {clone_path}')
         
-        # ========== STEP 2: RUN OPENGREP SCAN ==========
-        logger.info('')
-        logger.info('╔' + '─' * 78 + '╗')
-        logger.info('║ STEP 2/5: RUNNING OPENGREP SCAN'.ljust(79) + '║')
-        logger.info('╚' + '─' * 78 + '╝')
+        # ========== STEP 2: RUN SCANS BASED ON scan_types ==========
+        step_num = 2
         
-        success, opengrep_results = run_opengrep_scan(clone_path, scan_id)
-        
-        if not success:
-            logger.error(f'[Step 2] ✗ OpenGrep failed: {opengrep_results.get("error", "Unknown error")}')
-            # Continue to cleanup even if scan failed
-            logger.info('[Step 2] Attempting cleanup despite scan failure...')
-            cleanup_cloned_repo(repo_owner, repo_name)
+        # SATS = OpenGrep (includes Slither internally)
+        if 'sats' in scan_types:
+            logger.info('')
+            logger.info('╔' + '─' * 78 + '╗')
+            logger.info(f'║ STEP {step_num}/6: RUNNING SATS (OPENGREP + SLITHER)'.ljust(79) + '║')
+            logger.info('╚' + '─' * 78 + '╝')
             
-            return {
-                'status': 'error',
-                'message': f'OpenGrep scan failed: {opengrep_results.get("error", "Unknown error")}',
-                'scan_id': scan_id,
-                'repo_id': repo_id,
-                'repo_name': repo_name,
-                'error_details': opengrep_results
-            }
+            success, opengrep_results = run_opengrep_scan(clone_path, scan_id)
+            
+            if not success:
+                logger.error(f'[Step {step_num}] ✗ OpenGrep failed: {opengrep_results.get("error", "Unknown error")}')
+                # Continue to cleanup even if scan failed
+                logger.info(f'[Step {step_num}] Attempting cleanup despite scan failure...')
+                cleanup_cloned_repo(repo_owner, repo_name)
+                
+                return {
+                    'status': 'error',
+                    'message': f'SATS scan failed: {opengrep_results.get("error", "Unknown error")}',
+                    'scan_id': scan_id,
+                    'repo_id': repo_id,
+                    'repo_name': repo_name,
+                    'error_details': opengrep_results
+                }
+            
+            logger.info(f'[Step {step_num}] ✓ SATS complete: {opengrep_results.get("findings_count", 0)} findings')
+            step_num += 1
         
-        logger.info(f'[Step 2] ✓ OpenGrep complete: {opengrep_results.get("findings_count", 0)} findings')
+        # SECRET = TruffleHog
+        if 'secret' in scan_types:
+            logger.info('')
+            logger.info('╔' + '─' * 78 + '╗')
+            logger.info(f'║ STEP {step_num}/6: RUNNING SECRET SCAN (TRUFFLEHOG)'.ljust(79) + '║')
+            logger.info('╚' + '─' * 78 + '╝')
+            
+            success, truffle_results = run_truffle_scan(clone_path, scan_id)
+            
+            if not success:
+                logger.warning(f'[Step {step_num}] ⚠ TruffleHog had issues: {truffle_results.get("error", "Unknown")}')
+                truffle_results = {
+                    'status': 'failed',
+                    'findings_count': 0,
+                    'results': []
+                }
+            
+            logger.info(f'[Step {step_num}] ✓ Secret scan complete: {truffle_results.get("findings_count", 0)} secrets')
+            step_num += 1
         
-        # ========== STEP 3: RUN TRUFFLEHOG SCAN ==========
-        logger.info('')
-        logger.info('╔' + '─' * 78 + '╗')
-        logger.info('║ STEP 3/7: RUNNING TRUFFLEHOG SCAN (SECRETS)'.ljust(79) + '║')
-        logger.info('╚' + '─' * 78 + '╝')
-        
-        success, truffle_results = run_truffle_scan(clone_path, scan_id)
-        
-        if not success:
-            logger.warning(f'[Step 3] ⚠ TruffleHog had issues: {truffle_results.get("error", "Unknown")}')
-            truffle_results = {
-                'status': 'failed',
-                'findings_count': 0,
-                'results': []
-            }
-        
-        logger.info(f'[Step 3] ✓ TruffleHog complete: {truffle_results.get("findings_count", 0)} secrets')
-        
-        # ========== STEP 4: RUN TRIVY SCAN ==========
-        logger.info('')
-        logger.info('╔' + '─' * 78 + '╗')
-        logger.info('║ STEP 4/7: RUNNING TRIVY SCAN'.ljust(79) + '║')
-        logger.info('╚' + '─' * 78 + '╝')
-        
-        success_trivy, trivy_results = run_trivy_scan(clone_path, scan_id)
-        
-        if not success_trivy:
-            logger.error(f'[Step 3] ✗ Trivy failed: {trivy_results.get("error", "Unknown error")}')
-            # Continue anyway - Trivy failure shouldn't stop the workflow
-            logger.info('[Step 3] Trivy scan failed, but continuing with results...')
-            trivy_results = {
-                'status': 'failed',
-                'error': trivy_results.get("error", "Unknown error"),
-                'findings_count': 0,
-                'results': []
-            }
-        
-        logger.info(f'[Step 3] ✓ Trivy SBOM complete: {trivy_results.get("findings_count", 0)} components')
+        # SBOM = Trivy
+        if 'sbom' in scan_types:
+            logger.info('')
+            logger.info('╔' + '─' * 78 + '╗')
+            logger.info(f'║ STEP {step_num}/6: RUNNING SBOM SCAN (TRIVY)'.ljust(79) + '║')
+            logger.info('╚' + '─' * 78 + '╝')
+            
+            success_trivy, trivy_results = run_trivy_scan(clone_path, scan_id)
+            
+            if not success_trivy:
+                logger.warning(f'[Step {step_num}] ⚠ Trivy failed: {trivy_results.get("error", "Unknown error")}')
+                trivy_results = {
+                    'status': 'failed',
+                    'error': trivy_results.get("error", "Unknown error"),
+                    'findings_count': 0,
+                    'results': []
+                }
+            
+            logger.info(f'[Step {step_num}] ✓ SBOM complete: {trivy_results.get("findings_count", 0)} components')
+            step_num += 1
         
         # ========== STEP 5: MERGE FINDINGS ==========
         logger.info('')
         logger.info('╔' + '─' * 78 + '╗')
-        logger.info('║ STEP 5/7: MERGING FINDINGS'.ljust(79) + '║')
+        logger.info(f'║ STEP {step_num}/6: MERGING FINDINGS'.ljust(79) + '║')
         logger.info('╚' + '─' * 78 + '╝')
         
         merged_results = merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, repo_name, repo_owner, repo_branch)
-        logger.info(f'[Step 5] ✓ Merged: {merged_results["summary"]["total_unique"]} unique findings')
+        logger.info(f'[Step {step_num}] ✓ Merged: {merged_results["summary"]["total_unique"]} unique findings')
         
         # ========== STEP 6: SAVE RESULTS ==========
         logger.info('')
         logger.info('╔' + '─' * 78 + '╗')
-        logger.info('║ STEP 6/7: SAVING RESULTS'.ljust(79) + '║')
+        logger.info(f'║ STEP {step_num}/6: SAVING RESULTS'.ljust(79) + '║')
         logger.info('╚' + '─' * 78 + '╝')
         
         combined_results = {
@@ -1365,13 +1382,14 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main'):
             'merged': merged_results,
             'repo_name': repo_name,
             'repo_owner': repo_owner,
-            'repo_branch': repo_branch
+            'repo_branch': repo_branch,
+            'scan_types': scan_types
         }
         
         results_dir = save_scan_results(combined_results, scan_id)
         
         if not results_dir:
-            logger.error('[Step 4] ✗ Failed to save results')
+            logger.error(f'[Step {step_num}] ✗ Failed to save results')
             # Continue to cleanup
             cleanup_cloned_repo(repo_owner, repo_name)
             
@@ -1383,20 +1401,20 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main'):
                 'repo_name': repo_name
             }
         
-        logger.info(f'[Step 5] ✓ Results saved: {results_dir}')
+        logger.info(f'[Step {step_num}] ✓ Results saved: {results_dir}')
         
         # ========== STEP 6: CLEANUP ==========
         logger.info('')
         logger.info('╔' + '─' * 78 + '╗')
-        logger.info('║ STEP 7/7: CLEANUP'.ljust(79) + '║')
+        logger.info('║ STEP 6/6: CLEANUP'.ljust(79) + '║')
         logger.info('╚' + '─' * 78 + '╝')
         
         cleanup_success = cleanup_cloned_repo(repo_owner, repo_name)
         
         if cleanup_success:
-            logger.info(f'[Step 6] ✓ Repository cleanup successful')
+            logger.info('[Step 6] ✓ Repository cleanup successful')
         else:
-            logger.warning(f'[Step 6] ⚠ Repository cleanup had issues (may retry manually)')
+            logger.warning('[Step 6] ⚠ Repository cleanup had issues (may retry manually)')
         
         # ========== FINAL RESULT ==========
         logger.info('')

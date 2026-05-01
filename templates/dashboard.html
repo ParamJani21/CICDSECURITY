@@ -201,6 +201,40 @@
         </main>
     </div>
 
+    <!-- Scan Options Modal -->
+    <div id="scan-options-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Select Scan Types</h3>
+                <span class="modal-close" onclick="closeScanModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p class="modal-subtitle">Choose which scan types to run:</p>
+                <div class="scan-options">
+                    <label class="scan-option">
+                        <input type="checkbox" id="scan-sats" value="sats" checked>
+                        <span class="option-label">🛡️ SATS</span>
+                        <span class="option-desc">Static Analysis (OpenGrep + Slither)</span>
+                    </label>
+                    <label class="scan-option">
+                        <input type="checkbox" id="scan-sbom" value="sbom" checked>
+                        <span class="option-label">📦 SBOM</span>
+                        <span class="option-desc">Software Bill of Materials (Trivy)</span>
+                    </label>
+                    <label class="scan-option">
+                        <input type="checkbox" id="scan-secret" value="secret" checked>
+                        <span class="option-label">🔐 SECRET</span>
+                        <span class="option-desc">Secret Scanning (TruffleHog)</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-cancel" onclick="closeScanModal()">Cancel</button>
+                <button class="modal-btn modal-btn-confirm" id="confirm-scan-btn" onclick="confirmScan()">🚀 Start Scan</button>
+            </div>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
 </body>
 </html>
