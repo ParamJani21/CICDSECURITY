@@ -41,18 +41,7 @@ go install github.com/trufflesecurity/trufflehog/v3@latest
 
 ## Configuration
 
-1. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Edit `.env` and add your GitHub App credentials:
-   ```
-   GITHUB_APP_ID=your_app_id
-   GITHUB_PRIVATE_KEY="your_private_key_content"
-   ```
-
-3. Install Python dependencies:
+1. Install Python dependencies:
    ```bash
    pip install -r requirements.txt
    ```
