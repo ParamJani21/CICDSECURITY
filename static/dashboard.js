@@ -1,15 +1,74 @@
 /* ============================================
    CICDSECURITY Dashboard JavaScript
+   Performance Optimized Edition
    ============================================ */
 
-// Retry tracking for findings loading
-const findingsRetryTracker = new Map();
-const MAX_RETRIES = 5;
-const INITIAL_RETRY_DELAY = 500; // ms
-const INITIAL_LOAD_DELAY = 300; // ms - increased from 100ms to ensure DOM is ready
+// ============ CACHING SYSTEM ============
+// Cache for API responses with TTL (Time-To-Live in milliseconds)
+const CACHE_TTL = 30000; // 30 seconds
+const scanFindingsCache = {};
 
-// Track selected branches per repo (repoId -> branch name)
-const selectedBranches = new Map();
+// Debounce function for manual refresh
+function debounce(func, delay) {
+    let timeoutId;
+    return function(...args) {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => func(...args), delay);
+    };
+}
+
+// Get cached data if fresh, otherwise return null
+function getCachedFindings(scanId) {
+    const cached = scanFindingsCache[scanId];
+    if (!cached) return null;
+    
+    const now = Date.now();
+    const age = now - cached.timestamp;
+    
+    if (age < CACHE_TTL) {
+        console.log(`✓ Cache HIT for ${scanId} (${age}ms old)`);
+        return cached.data;
+    }
+    
+    console.log(`⚠ Cache STALE for ${scanId} (${age}ms old)`);
+    return null;
+}
+
+// Store findings in cache
+function setCachedFindings(scanId, data) {
+    scanFindingsCache[scanId] = {
+        data: data,
+        timestamp: Date.now()
+    };
+    console.log(`✓ Cached findings for ${scanId}`);
+}
+
+// Persist checkbox state to localStorage
+function saveCheckboxState() {
+    const checkedIds = Array.from(document.querySelectorAll('.scan-checkbox:checked'))
+        .map(cb => cb.getAttribute('data-scan-id'));
+    localStorage.setItem('checkedScans', JSON.stringify(checkedIds));
+}
+
+// Restore checkbox state from localStorage
+function restoreCheckboxState() {
+    try {
+        const checkedIds = JSON.parse(localStorage.getItem('checkedScans') || '[]');
+        checkedIds.forEach(id => {
+            const cb = document.querySelector(`.scan-checkbox[data-scan-id="${id}"]`);
+            if (cb) cb.checked = true;
+        });
+    } catch (e) {
+        console.warn('Failed to restore checkbox state:', e);
+    }
+}
+
+// Track expanded scans for this session
+let expandedScanIds = new Set();
+
+// ============ Simplified Retry Logic ============
+const MAX_RETRIES = 2;
+const RETRY_DELAY = 1000; // 1 second
 
 // ============ Tab Management ============
 document.addEventListener('DOMContentLoaded', function() {
@@ -17,6 +76,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeTabs();
     updateTimestamps();
     loadDynamicContent();
+    initializeUserMenu();
     setInterval(updateTimestamps, 1000);
 });
 
@@ -136,7 +196,7 @@ function loadTabContent(tabName) {
         case 'repos':
             break;
         case 'history':
-            loadHistory(); // Always reload to show latest scans
+            loadHistory();
             break;
         case 'settings':
             loadSettings();
@@ -258,7 +318,6 @@ function renderScansChart() {
                             beginAtZero: true
                         }
                     },
-                    // Fixed bar width instead of stretching
                     barThickness: 35,
                     categoryPercentage: 0.7,
                     barPercentage: 0.95
@@ -270,12 +329,12 @@ function renderScansChart() {
         });
 }
 
-
+// Track selected branches per repo (repoId -> branch name)
+const selectedBranches = new Map();
 
 function loadRepositories() {
     const reposList = document.getElementById('repos-list');
     if (!reposList) return;
-    // Try to render cached repos immediately to avoid long waits
     sendClientLog('loadRepositories_start', { cached: !!localStorage.getItem('reposCache') });
     const cache = localStorage.getItem('reposCache');
     if (cache) {
@@ -300,9 +359,7 @@ function loadRepositories() {
         .then(data => {
             clearTimeout(timeoutId);
             const repos = data.repositories || [];
-            // Update cache
             try { localStorage.setItem('reposCache', JSON.stringify(repos)); } catch (e) { /* ignore */ }
-            // Render
             reposList.innerHTML = repos.length > 0 ? renderReposHtml(repos) : '<div style="grid-column: 1 / -1; padding: 2rem; text-align: center; color: #64748b;">No repositories available</div>';
             sendClientLog('loadRepositories_success', { count: repos.length });
         })
@@ -315,24 +372,20 @@ function loadRepositories() {
                 console.error('Error loading repositories:', error);
                 sendClientLog('loadRepositories_error', { message: error.message || String(error) }, 'error');
             }
-            // leave cached content visible
         });
 }
 
 function renderReposHtml(repos) {
     let html = '';
     repos.forEach(repo => {
-        // Extract owner from repo object or construct from clone_url
         let repoOwner = repo.owner || 'unknown';
         let repoUrl = repo.clone_url || repo.html_url || `https://github.com/${repoOwner}/${repo.name}.git`;
         let repoBranch = repo.branch || repo.default_branch || 'main';
         
-        // Initialize selected branch if not set
         if (!selectedBranches.has(repo.id)) {
             selectedBranches.set(repo.id, repoBranch);
         }
         
-        // Escape quotes for JavaScript
         const escapedName = (repo.name || '').replace(/'/g, "\\'");
         const escapedOwner = (repoOwner || '').replace(/'/g, "\\'");
         const escapedUrl = (repoUrl || '').replace(/'/g, "\\'");
@@ -354,7 +407,6 @@ function renderReposHtml(repos) {
         `;
     });
     
-    // After rendering, fetch branches for each repo
     setTimeout(() => {
         repos.forEach(repo => {
             fetchAndPopulateBranches(repo);
@@ -364,7 +416,6 @@ function renderReposHtml(repos) {
     return html;
 }
 
-// Fetch available branches for a repo and populate dropdown
 function fetchAndPopulateBranches(repo) {
     const selectElement = document.getElementById(`branch-select-${repo.id}`);
     if (!selectElement) return;
@@ -376,11 +427,9 @@ function fetchAndPopulateBranches(repo) {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success' && data.branches && data.branches.length > 0) {
-                // Clear existing options except the first one (default branch)
                 const currentValue = selectElement.value;
                 selectElement.innerHTML = '';
                 
-                // Add all branches as options
                 data.branches.forEach(branch => {
                     const option = document.createElement('option');
                     option.value = branch;
@@ -389,12 +438,10 @@ function fetchAndPopulateBranches(repo) {
                     selectElement.appendChild(option);
                 });
                 
-                // Store the current selected branch
                 if (!selectedBranches.has(repo.id)) {
                     selectedBranches.set(repo.id, data.branches[0]);
                 }
             } else {
-                // If no branches found or error, keep current selection
                 console.warn(`Could not fetch branches for ${owner}/${repoName}`);
             }
         })
@@ -403,13 +450,11 @@ function fetchAndPopulateBranches(repo) {
         });
 }
 
-// Handle branch dropdown change
 function onBranchChange(repoId, selectedBranch) {
     selectedBranches.set(repoId, selectedBranch);
     console.log(`Branch selected for repo ${repoId}: ${selectedBranch}`);
 }
 
-// Simple non-blocking toast notification helper (replaces alert)
 function showToast(message, type = 'info', timeout = 6000) {
     try {
         let container = document.getElementById('toast-container');
@@ -533,13 +578,11 @@ function startSingleRepoScan(repo, scanTypes) {
 function startScanAllRepos(scanTypes) {
     showToast(`Starting scan for all repositories... (${scanTypes.join(', ')})`, 'info');
     
-    // Fetch current repos to get their selected branches
     fetch('/api/repos')
         .then(response => response.json())
         .then(data => {
             const repos = data.repositories || [];
             
-            // Build array of repos with their selected branches
             const reposWithBranches = repos.map(repo => ({
                 repo_id: repo.id,
                 repo_name: repo.name,
@@ -548,7 +591,6 @@ function startScanAllRepos(scanTypes) {
                 repo_branch: selectedBranches.get(repo.id) || repo.branch || 'main'
             }));
             
-            // Send scan request with branch info for each repo
             fetch('/api/repos/scan-all', {
                 method: 'POST',
                 headers: {
@@ -585,7 +627,6 @@ function scanAllRepos() {
 }
 
 function triggerManualScan(repoId, repoName, repoOwner, repoUrl) {
-    // Get the selected branch from the dropdown
     const selectedBranch = selectedBranches.get(parseInt(repoId)) || 'main';
     
     const repo = {
@@ -598,13 +639,13 @@ function triggerManualScan(repoId, repoName, repoOwner, repoUrl) {
     openScanModal([repo], false);
 }
 
+// ============ OPTIMIZED HISTORY LOADING - LAZY LOAD FINDINGS ============
 function loadHistory() {
     const historyList = document.getElementById('history-list');
     if (!historyList) return;
 
     sendClientLog('loadHistory_start');
     
-    // Reset delete button on refresh (checkboxes will be cleared)
     syncDeleteButtonState();
 
     fetch('/api/history')
@@ -628,7 +669,7 @@ function loadHistory() {
                         <div class="history-item" data-scan-id="${scan.scan_id}">
                             <div class="history-row" onclick="toggleScanDetails('${scan.scan_id}')">
                                 <div class="col-checkbox">
-                                    <input type="checkbox" class="scan-checkbox" data-scan-id="${scan.scan_id}" onclick="event.stopPropagation(); updateDeleteButton()">
+                                    <input type="checkbox" class="scan-checkbox" data-scan-id="${scan.scan_id}" onclick="event.stopPropagation(); updateDeleteButton(); saveCheckboxState()">
                                 </div>
                                 <div class="col-time">${formatDate(scan.timestamp)}</div>
                                 <div class="col-repo">${scan.repository || 'Unknown'}</div>
@@ -640,11 +681,8 @@ function loadHistory() {
                                     <span class="severity-badge medium">${medium}</span>
                                     <span class="severity-badge low">${low}</span>
                                 </div>
-                                <div class="col-multi">${multiSource > 0 ? multiSource : '-'}</div>
-                                <div class="col-action">
-                                    <button class="view-detail-btn" onclick="event.stopPropagation(); toggleScanDetails('${scan.scan_id}')" title="View Details">▶</button>
-                                </div>
-                            </div>
+                                 <div class="col-multi">${multiSource > 0 ? multiSource : '-'}</div>
+                             </div>
                             <div class="scan-details" id="details-${scan.scan_id}" style="display: none;">
                                 <div class="details-content">
                                     <div class="details-header">
@@ -680,15 +718,12 @@ function loadHistory() {
                                     </div>
                                     <div class="findings-list" id="findings-${scan.scan_id}">
                                         <h5>All Findings from merged.json (${total})</h5>
-                                        <div class="findings-loading">Loading findings...</div>
+                                        <div class="findings-loading" style="display: none;">Loading findings...</div>
                                     </div>
                                  </div>
-                             </div>
-                         </div>`;
-                     
-                     // Load findings via API after DOM is ready
-                     setTimeout(() => loadScanFindings(scan.scan_id), INITIAL_LOAD_DELAY);
-                 });
+                              </div>
+                          </div>`;
+                  });
             } else {
                 html = '<div style="grid-column: 1 / -1; padding: 2rem; text-align: center; color: #64748b;">No scans found. Trigger a scan to see results here.</div>';
             }
@@ -706,6 +741,9 @@ function loadHistory() {
                 }
             });
             
+            // Restore checkbox state from localStorage
+            restoreCheckboxState();
+            
             // Update stats
             document.getElementById('total-scans').textContent = data.stats.total_scans || 0;
             document.getElementById('total-findings').textContent = data.stats.total_findings || 0;
@@ -719,148 +757,145 @@ function loadHistory() {
         });
 }
 
+// ============ LAZY LOAD FINDINGS - CALLED WHEN USER EXPANDS ============
 function loadScanFindings(scanId) {
     const container = document.getElementById('findings-' + scanId);
     if (!container) {
         console.error('❌ Container NOT found for:', 'findings-' + scanId);
-        console.log('Available IDs:', Array.from(document.querySelectorAll('[id^="findings-"]')).map(el => el.id));
         return;
     }
     
     console.log('✓ Loading findings for:', scanId);
-    console.log('  Container found:', container.className);
     
-    // Initialize retry tracker for this scan
-    if (!findingsRetryTracker.has(scanId)) {
-        findingsRetryTracker.set(scanId, { attempts: 0, lastError: null });
+    // Check cache first
+    const cachedData = getCachedFindings(scanId);
+    if (cachedData) {
+        console.log(`✓ Using cached findings for ${scanId}`);
+        renderFindings(scanId, cachedData, container);
+        // Fetch fresh data in background
+        fetchAndCacheFindings(scanId, container, true);
+        return;
     }
     
-    fetch('/api/history/' + scanId)
-        .then(response => {
-            console.log(`⬇️  API Response for ${scanId}: Status ${response.status}`);
-            
-            // Get the retry info
-            const retryInfo = findingsRetryTracker.get(scanId);
-            
-            // Handle different response statuses
-            if (response.status === 202) {
-                // 202 Accepted - file still being written, schedule retry
-                console.log(`⏳ Scan ${scanId} still processing. Scheduling retry...`);
-                retryInfo.attempts++;
-                if (retryInfo.attempts < MAX_RETRIES) {
-                    const delay = INITIAL_RETRY_DELAY * Math.pow(1.5, retryInfo.attempts - 1);
-                    console.log(`  → Retry attempt ${retryInfo.attempts}/${MAX_RETRIES} after ${Math.round(delay)}ms`);
-                    setTimeout(() => loadScanFindings(scanId), delay);
-                } else {
-                    container.innerHTML = '<p style="color:#f87171;"><strong>Still loading findings...</strong> Results may still be being processed. Please try again in a few moments.</p>';
-                }
-                return null;
-            }
-            
-            if (response.status === 206) {
-                // 206 Partial Content - some files loaded, some incomplete
-                console.log(`⚠️  Partial data for ${scanId}, proceeding with available data`);
-                retryInfo.attempts = 0; // Reset attempts since we got some data
-                return response.json();
-            }
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            console.log(`✓ Got 200 response for ${scanId}`);
-            retryInfo.attempts = 0; // Reset on successful response
-            return response.json();
-        })
-        .then(data => {
-            if (data === null) {
-                // This happens on 202 response - we're handling the retry above
-                console.log(`  (202 response - retry scheduled)`);
-                return;
-            }
-            
-            console.log(`📦 Processing data for ${scanId}:`, Object.keys(data));
-            
-            // Handle both response formats
-            let findings = [];
-            if (data.files && data.files.merged) {
-                const merged = data.files.merged;
-                console.log(`  merged.json found, findings type:`, typeof merged.findings);
-                if (Array.isArray(merged.findings)) {
-                    findings = merged.findings;
-                    console.log(`    ✓ findings is array: ${findings.length} items`);
-                } else if (merged.findings && typeof merged.findings === 'object') {
-                    findings = Object.values(merged.findings);
-                    console.log(`    ✓ findings is object, converted to array: ${findings.length} items`);
-                } else {
-                    console.log(`    ✗ findings is`, typeof merged.findings);
-                }
-            } else if (data.findings) {
-                console.log(`  findings found at top level, type:`, typeof data.findings);
-                findings = Array.isArray(data.findings) ? data.findings : Object.values(data.findings);
-            } else {
-                console.log(`  ✗ No findings found in response`);
-            }
-            
-            if (!Array.isArray(findings)) {
-                console.log(`  ⚠️  findings is not array after processing:`, typeof findings);
-                findings = [];
-            }
-            
-            if (!findings || findings.length === 0) {
-                console.log(`  📭 No findings (empty)`);
-                container.innerHTML = '<h5>All Findings from merged.json</h5><p style="color:#94a3b8;font-style:italic;">No findings found</p>';
-                return;
-            }
-            
-            console.log(`  ✅ Rendering ${findings.length} findings`);
-            let findingsHtml = '<h5>All Findings from merged.json (' + findings.length + ')</h5>';
-            
-            findings.forEach((f, idx) => {
-                const severityClass = (f.severity || '').toLowerCase();
-                const sources = (f.sources || []).join(', ');
-                const cwe = (f.cwe || []).join(', ');
-                
-                findingsHtml += `
-                    <div class="finding-item">
-                        <div class="finding-header">
-                            <span class="finding-file">${f.file}:${f.line}</span>
-                            <span class="finding-type">${f.type || 'unknown'}</span>
-                            <span class="severity-badge ${severityClass}">${f.severity || 'INFO'}</span>
-                        </div>
-                        <div class="finding-title">${f.title || 'Untitled'}</div>
-                        ${f.message ? `<div class="finding-message">${f.message.substring(0, 200)}</div>` : ''}
-                        ${cwe ? `<div class="finding-cwe">CWE: ${cwe}</div>` : ''}
-                        <div class="source-badges">
-                            ${(f.sources || []).map(s => `<span class="source-badge">${s}</span>`).join('')}
-                        </div>
-                    </div>
-                `;
-            });
-            
-            container.innerHTML = findingsHtml;
-            console.log(`✅ DOM updated successfully for ${scanId}`);
-        })
-        .catch(err => {
-            const retryInfo = findingsRetryTracker.get(scanId);
-            retryInfo.lastError = err.message;
-            retryInfo.attempts++;
-            
-            console.error(`❌ Error loading findings for ${scanId}:`, err.message);
-            console.error(`  Attempt ${retryInfo.attempts}/${MAX_RETRIES}`);
-            
-            if (retryInfo.attempts < MAX_RETRIES) {
-                const delay = INITIAL_RETRY_DELAY * Math.pow(1.5, retryInfo.attempts - 1);
-                console.log(`  → Retrying in ${Math.round(delay)}ms...`);
-                setTimeout(() => loadScanFindings(scanId), delay);
-            } else {
-                console.error(`❌ Max retries reached for ${scanId}`);
-                container.innerHTML = `<p style="color:#f87171;"><strong>Failed to load findings</strong><br><code style="font-size:12px;">${retryInfo.lastError}</code></p>`;
-            }
-        });
+    // Show loading message
+    const loadingDiv = container.querySelector('.findings-loading');
+    if (loadingDiv) {
+        loadingDiv.style.display = 'block';
+    }
+    
+    fetchAndCacheFindings(scanId, container, false);
 }
 
-let expandedScanIds = new Set();
+// Fetch findings with simplified retry logic
+function fetchAndCacheFindings(scanId, container, isBackground = false) {
+    let attempts = 0;
+    
+    function retry() {
+        attempts++;
+        
+        fetch('/api/history/' + scanId)
+            .then(response => {
+                console.log(`⬇️  API Response for ${scanId}: Status ${response.status}`);
+                
+                if (response.status === 202) {
+                    console.log(`⏳ Scan ${scanId} still processing. Scheduling retry...`);
+                    if (attempts < MAX_RETRIES) {
+                        setTimeout(retry, RETRY_DELAY);
+                    } else {
+                        if (!isBackground) {
+                            container.innerHTML = '<p style="color:#f87171;"><strong>Still loading findings...</strong> Results may still be being processed. Please try again in a few moments.</p>';
+                        }
+                    }
+                    return null;
+                }
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                console.log(`✓ Got response for ${scanId}`);
+                return response.json();
+            })
+            .then(data => {
+                if (data === null) return;
+                
+                console.log(`📦 Processing data for ${scanId}:`, Object.keys(data));
+                
+                // Cache the data
+                setCachedFindings(scanId, data);
+                
+                // Render findings
+                renderFindings(scanId, data, container);
+            })
+            .catch(err => {
+                console.error(`❌ Error loading findings for ${scanId}:`, err.message);
+                
+                if (attempts < MAX_RETRIES) {
+                    console.log(`  → Retry attempt ${attempts}/${MAX_RETRIES}...`);
+                    setTimeout(retry, RETRY_DELAY);
+                } else {
+                    if (!isBackground) {
+                        container.innerHTML = `<p style="color:#f87171;"><strong>Failed to load findings</strong><br><code style="font-size:12px;">${err.message}</code></p>`;
+                    }
+                }
+            });
+    }
+    
+    retry();
+}
+
+// Render findings to container
+function renderFindings(scanId, data, container) {
+    let findings = [];
+    
+    if (data.files && data.files.merged) {
+        const merged = data.files.merged;
+        if (Array.isArray(merged.findings)) {
+            findings = merged.findings;
+        } else if (merged.findings && typeof merged.findings === 'object') {
+            findings = Object.values(merged.findings);
+        }
+    } else if (data.findings) {
+        findings = Array.isArray(data.findings) ? data.findings : Object.values(data.findings);
+    }
+    
+    if (!Array.isArray(findings)) {
+        findings = [];
+    }
+    
+    if (!findings || findings.length === 0) {
+        console.log(`  📭 No findings (empty)`);
+        container.innerHTML = '<h5>All Findings from merged.json</h5><p style="color:#94a3b8;font-style:italic;">No findings found</p>';
+        return;
+    }
+    
+    console.log(`  ✅ Rendering ${findings.length} findings`);
+    let findingsHtml = '<h5>All Findings from merged.json (' + findings.length + ')</h5>';
+    
+    findings.forEach((f, idx) => {
+        const severityClass = (f.severity || '').toLowerCase();
+        const cwe = (f.cwe || []).join(', ');
+        
+        findingsHtml += `
+            <div class="finding-item">
+                <div class="finding-header">
+                    <span class="finding-file">${f.file}:${f.line}</span>
+                    <span class="finding-type">${f.type || 'unknown'}</span>
+                    <span class="severity-badge ${severityClass}">${f.severity || 'INFO'}</span>
+                </div>
+                <div class="finding-title">${f.title || 'Untitled'}</div>
+                ${f.message ? `<div class="finding-message">${f.message.substring(0, 200)}</div>` : ''}
+                ${cwe ? `<div class="finding-cwe">CWE: ${cwe}</div>` : ''}
+                <div class="source-badges">
+                    ${(f.sources || []).map(s => `<span class="source-badge">${s}</span>`).join('')}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = findingsHtml;
+    console.log(`✅ DOM updated successfully for ${scanId}`);
+}
 
 function toggleScanDetails(scanId) {
     const details = document.getElementById('details-' + scanId);
@@ -874,133 +909,26 @@ function toggleScanDetails(scanId) {
         expandedScanIds.add(scanId);
         details.style.display = 'block';
         if (btn) btn.innerHTML = '▼';
+        
+        // Lazy load findings when user expands
+        const findingsContainer = document.getElementById('findings-' + scanId);
+        // Check if findings have actually been loaded (has finding-item divs, not just header)
+        const hasLoadedFindings = findingsContainer && findingsContainer.querySelector('.finding-item');
+        if (findingsContainer && !hasLoadedFindings) {
+            loadScanFindings(scanId);
+        }
     }
 }
 
-// Auto-refresh history every 5 seconds when tab is active (but skip if details are expanded)
-setInterval(() => {
-    const historyTab = document.getElementById('history-tab');
-    if (historyTab && historyTab.classList.contains('active')) {
-        if (expandedScanIds.size === 0) {
-            // Save checked state before refresh
-            const checkedIds = Array.from(document.querySelectorAll('.scan-checkbox:checked'))
-                .map(cb => cb.getAttribute('data-scan-id'));
-            
-            // Call loadHistory and restore after it completes
-            loadHistoryWithRestore(checkedIds);
-        }
-    }
-}, 5000);
+// ============ DEBOUNCED MANUAL REFRESH ============
+const debouncedRefreshHistory = debounce(() => {
+    console.log('🔄 Manual refresh triggered (debounced)');
+    loadHistory();
+}, 2000);
 
-function loadHistoryWithRestore(checkedIds) {
-    const historyList = document.getElementById('history-list');
-    if (!historyList) return;
-
-    fetch('/api/history')
-        .then(response => response.json())
-        .then(data => {
-            let html = '';
-            if (data.history && data.history.length > 0) {
-                data.history.forEach(scan => {
-                    const severity = scan.severity || {};
-                    const category = scan.category || {};
-                    const multiSource = scan.multi_source || 0;
-                    const branch = scan.branch || 'unknown';
-                    
-                    const critical = severity.CRITICAL || 0;
-                    const high = severity.HIGH || 0;
-                    const medium = severity.MEDIUM || 0;
-                    const low = severity.LOW || 0;
-                    const total = scan.total_findings || 0;
-                    
-                    html += `
-                        <div class="history-item" data-scan-id="${scan.scan_id}">
-                            <div class="history-row" onclick="toggleScanDetails('${scan.scan_id}')">
-                                <div class="col-checkbox">
-                                    <input type="checkbox" class="scan-checkbox" data-scan-id="${scan.scan_id}" onclick="event.stopPropagation(); updateDeleteButton()">
-                                </div>
-                                <div class="col-time">${formatDate(scan.timestamp)}</div>
-                                <div class="col-repo">${scan.repository || 'Unknown'}</div>
-                                <div class="col-branch">${branch}</div>
-                                <div class="col-total">${total}</div>
-                                <div class="col-severity">
-                                    <span class="severity-badge critical">${critical}</span>
-                                    <span class="severity-badge high">${high}</span>
-                                    <span class="severity-badge medium">${medium}</span>
-                                    <span class="severity-badge low">${low}</span>
-                                </div>
-                                <div class="col-multi">${multiSource > 0 ? multiSource : '-'}</div>
-                                <div class="col-action">
-                                    <button class="view-detail-btn" onclick="event.stopPropagation(); toggleScanDetails('${scan.scan_id}')" title="View Details">▶</button>
-                                </div>
-                            </div>
-                            <div class="scan-details" id="details-${scan.scan_id}" style="display: none;">
-                                <div class="details-content">
-                                    <div class="details-header">
-                                        <h4>Scan: ${scan.scan_id}</h4>
-                                        <span class="repo-name">${scan.repository || 'Unknown'}</span>
-                                        <span class="scan-branch" style="margin-left: 1rem;">Branch: <strong>${branch}</strong></span>
-                                    </div>
-                                    <div class="details-grid">
-                                        <div class="detail-card">
-                                            <h5>Severity</h5>
-                                            <div class="detail-stat"><span class="stat-label">CRITICAL:</span><span class="stat-value critical">${critical}</span></div>
-                                            <div class="detail-stat"><span class="stat-label">HIGH:</span><span class="stat-value high">${high}</span></div>
-                                            <div class="detail-stat"><span class="stat-label">MEDIUM:</span><span class="stat-value medium">${medium}</span></div>
-                                            <div class="detail-stat"><span class="stat-label">LOW:</span><span class="stat-value low">${low}</span></div>
-                                        </div>
-                                        <div class="detail-card">
-                                            <h5>Category</h5>
-                                            <div class="detail-stat"><span class="stat-label">Secrets:</span><span class="stat-value">${category.secrets || 0}</span></div>
-                                            <div class="detail-stat"><span class="stat-label">Code:</span><span class="stat-value">${category.code || 0}</span></div>
-                                        </div>
-                                        <div class="detail-card">
-                                            <h5>Multi-Source</h5>
-                                            <div class="detail-stat highlight"><span class="stat-value">${multiSource}</span></div>
-                                        </div>
-                                    </div>
-                                    <div class="details-files">
-                                        <div class="file-badges">
-                                            <span class="file-badge">merged.json</span>
-                                            <span class="file-badge">opengrep.json</span>
-                                            <span class="file-badge">truffle.json</span>
-                                            <span class="file-badge">trivy.json</span>
-                                        </div>
-                                    </div>
-                                    <div class="findings-list" id="findings-${scan.scan_id}">
-                                        <h5>All Findings from merged.json (${total})</h5>
-                                        <div class="findings-loading">Loading findings...</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
-            } else {
-                html = '<p style="color: #64748b; text-align: center; padding: 2rem;">No scan history yet. Start scanning repositories to see results here.</p>';
-            }
-            
-            historyList.innerHTML = html;
-            
-            // Restore checked state AFTER HTML is inserted
-            if (checkedIds && checkedIds.length > 0) {
-                checkedIds.forEach(id => {
-                    const cb = document.querySelector(`.scan-checkbox[data-scan-id="${id}"]`);
-                    if (cb) cb.checked = true;
-                });
-                syncDeleteButtonState();
-            }
-            
-            // Update total scans count
-            const totalScansEl = document.getElementById('total-scans');
-            if (totalScansEl && data.stats) {
-                totalScansEl.textContent = data.stats.total_scans || 0;
-            }
-        })
-        .catch(error => {
-            console.error('Error loading history:', error);
-            historyList.innerHTML = '<p style="color: #64748b; text-align: center; padding: 2rem;">Error loading history</p>';
-        });
+function manualRefreshHistory() {
+    sendClientLog('manual_refresh_history');
+    debouncedRefreshHistory();
 }
 
 function loadSettings() {
@@ -1009,7 +937,6 @@ function loadSettings() {
     
     if (!form) return;
 
-    // Load current GitHub credentials
     sendClientLog('loadSettings_start');
     fetch('/api/settings/github')
         .then(response => response.json())
@@ -1018,7 +945,6 @@ function loadSettings() {
                 const creds = data.credentials;
                 document.getElementById('github_app_id').value = creds.github_app_id || '';
                 document.getElementById('github_app_name').value = creds.github_app_name || '';
-                // Do NOT populate the private key field for security. Show masked placeholder and keep readonly.
                 const secretEl = document.getElementById('github_secret_key');
                 if (secretEl) {
                     secretEl.value = '';
@@ -1031,12 +957,15 @@ function loadSettings() {
                 sendClientLog('loadSettings_error', { message: data.message || 'unknown' }, 'error');
             }
         })
-        .catch(error => { console.error('Error loading GitHub credentials:', error); sendClientLog('loadSettings_error', { message: error.message || String(error) }, 'error'); });
+        .catch(error => { 
+            console.error('Error loading GitHub credentials:', error); 
+            sendClientLog('loadSettings_error', { message: error.message || String(error) }, 'error'); 
+        });
 
-    // Handle Replace Key workflow
     const replaceBtn = document.getElementById('replace-key-btn');
     const cancelReplaceBtn = document.getElementById('cancel-replace-btn');
     const secretEl = document.getElementById('github_secret_key');
+    
     if (replaceBtn && secretEl) {
         replaceBtn.addEventListener('click', function() {
             secretEl.removeAttribute('readonly');
@@ -1048,6 +977,7 @@ function loadSettings() {
             sendClientLog('replace_key_clicked');
         });
     }
+    
     if (cancelReplaceBtn && secretEl) {
         cancelReplaceBtn.addEventListener('click', function() {
             secretEl.setAttribute('readonly', 'true');
@@ -1059,25 +989,21 @@ function loadSettings() {
         });
     }
 
-    // Handle form submission
     form.addEventListener('submit', function(e) {
         e.preventDefault();
 
         const formData = {
             github_app_id: document.getElementById('github_app_id').value.trim(),
             github_app_name: document.getElementById('github_app_name').value.trim(),
-            // Only send the secret key if the user replaced it (non-empty)
             github_secret_key: (document.getElementById('github_secret_key').value || '').trim(),
             ngrok_oauth_token: document.getElementById('ngrok_oauth_token').value.trim()
         };
 
-        // Validate at least one field is filled
         if (!Object.values(formData).some(v => v !== '')) {
             showSettingsStatus('Please fill in at least one field', 'error');
             return;
         }
 
-        // Show loading status
         showSettingsStatus('Saving credentials...', 'loading');
         sendClientLog('saveSettings_start', { github_app_id: formData.github_app_id ? true : false });
 
@@ -1093,7 +1019,6 @@ function loadSettings() {
             if (data.status === 'success') {
                 showSettingsStatus('✓ Credentials saved successfully to .env file', 'success');
                 sendClientLog('saveSettings_success', { github_app_id: !!formData.github_app_id });
-                // Clear form after successful save
                 setTimeout(() => {
                     form.reset();
                     statusDiv.innerHTML = '';
@@ -1131,9 +1056,8 @@ function updateTimestamps() {
         minute: '2-digit',
         second: '2-digit'
     });
-
+    
     const timestampEl = document.getElementById('timestamp');
-
     if (timestampEl) {
         timestampEl.textContent = formattedTime;
     }
@@ -1167,14 +1091,6 @@ window.addEventListener('load', function() {
 window.addEventListener('beforeunload', function() {
     sendClientLog('page_beforeunload', { url: window.location.pathname });
 });
-
-// ============ Prevent Scrolling (Extra Safety) ============
-document.addEventListener('wheel', function(event) {
-    const activeTab = document.querySelector('.tab-content.active');
-    if (activeTab && !activeTab.querySelector(':hover')) {
-        // Allow scroll only on scrollable containers
-    }
-}, { passive: true });
 
 // ============ Keyboard Navigation ============
 document.addEventListener('keydown', function(event) {
@@ -1212,7 +1128,6 @@ function animateSecurityScore() {
     }, 30);
 }
 
-// Run animation after page loads
 window.addEventListener('load', animateSecurityScore);
 
 // ============ Bulk Delete Functions ============
@@ -1250,11 +1165,11 @@ function toggleSelectAllScans() {
     });
     
     syncDeleteButtonState();
+    saveCheckboxState();
 }
 
 function exportReport() {
     sendClientLog('export_report_start', {});
-    
     window.location.href = '/api/export-report';
 }
 
@@ -1281,9 +1196,7 @@ function deleteSelectedScans() {
     .then(data => {
         if (data.success) {
             sendClientLog('delete_scans_success', { count: scanIds.length });
-            // Refresh history
             loadHistory();
-            // Reset delete button
             const deleteBtn = document.getElementById('delete-scans-btn');
             if (deleteBtn) deleteBtn.style.display = 'none';
         } else {
@@ -1295,5 +1208,69 @@ function deleteSelectedScans() {
         sendClientLog('delete_scans_error', { message: error.message || String(error) }, 'error');
         console.error('Error deleting scans:', error);
         alert('Error deleting scans: ' + error.message);
+    });
+}
+
+// ============ User Menu Functions ============
+
+function initializeUserMenu() {
+    fetch('/api/auth/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.username) {
+                const usernameEl = document.getElementById('current-username');
+                if (usernameEl) {
+                    usernameEl.textContent = data.username;
+                }
+            }
+        })
+        .catch(error => {
+            console.log('Could not fetch user info (may not be logged in)');
+        });
+    
+    const userMenuToggle = document.getElementById('user-menu-toggle');
+    const userDropdown = document.getElementById('user-dropdown');
+    
+    if (userMenuToggle && userDropdown) {
+        userMenuToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            userDropdown.classList.toggle('active');
+            userMenuToggle.classList.toggle('active');
+        });
+        
+        document.addEventListener('click', () => {
+            userDropdown.classList.remove('active');
+            userMenuToggle.classList.remove('active');
+        });
+        
+        userDropdown.addEventListener('click', (e) => {
+            if (e.target.closest('a, button')) {
+                userDropdown.classList.remove('active');
+                userMenuToggle.classList.remove('active');
+            }
+        });
+    }
+}
+
+function logout() {
+    sendClientLog('logout_start', {});
+    
+    fetch('/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (response.ok) {
+            sendClientLog('logout_success', {});
+            window.location.href = '/auth/login';
+        } else {
+            sendClientLog('logout_error', { status: response.status }, 'error');
+            alert('Logout failed. Please try again.');
+        }
+    })
+    .catch(error => {
+        sendClientLog('logout_error', { message: error.message }, 'error');
+        console.error('Logout error:', error);
+        alert('Logout error: ' + error.message);
     });
 }

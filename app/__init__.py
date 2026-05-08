@@ -1,13 +1,54 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify, redirect, url_for, session
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+from datetime import timedelta
+import secrets
+
+# Import database and session configuration
+from models.database import db
+from flask_session import Session as FlaskSession
 
 
 def create_app():
     app = Flask(__name__, template_folder='../templates', static_folder='../static')
-    app.config['SECRET_KEY'] = 'your-secret-key-here'
-
+    
+    # Generate or load SECRET_KEY from environment
+    SECRET_KEY = os.environ.get('FLASK_SECRET_KEY')
+    if not SECRET_KEY:
+        # Generate a random key for development (not suitable for production)
+        SECRET_KEY = secrets.token_hex(32)
+        app.logger.warning('No FLASK_SECRET_KEY in environment, generated temporary key')
+    
+    app.config['SECRET_KEY'] = SECRET_KEY
+    
+    # Database configuration
+    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cicdsecurity.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    # Session configuration
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
+    app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+    app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
+    app.config['SESSION_COOKIE_NAME'] = 'cicdsec_session'
+    app.config['SESSION_REFRESH_EACH_REQUEST'] = True
+    
+    # Initialize database
+    db.init_app(app)
+    
+    # Initialize session
+    FlaskSession(app)
+    
+    # Create database tables if they don't exist
+    with app.app_context():
+        try:
+            db.create_all()
+            app.logger.info('Database initialized successfully')
+        except Exception as e:
+            app.logger.error(f'Failed to initialize database: {e}')
     # Configure logging: console + rotating file
     log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
     os.makedirs(log_dir, exist_ok=True)
@@ -53,6 +94,10 @@ def create_app():
 
     from app.routes import bp
     app.register_blueprint(bp)
+    
+    # Register authentication blueprint
+    from app.auth_routes import auth_bp
+    app.register_blueprint(auth_bp)
 
     # Register scan API blueprint (controls for cloning/scanning)
     try:
@@ -60,6 +105,34 @@ def create_app():
         app.register_blueprint(scan_bp)
     except Exception as e:
         app.logger.warning('Could not register scan_api blueprint: %s', e)
+    
+    # Before request - check authentication (skip for auth routes and static files)
+    @app.before_request
+    def check_authentication():
+        """Check if user is authenticated before accessing protected routes"""
+        # Skip for static files, auth routes, and login page
+        if (request.path.startswith('/static/') or 
+            request.path.startswith('/auth/') or 
+            request.path in ['/login', '/', '/auth/setup/initial-admin']):
+            return
+        
+        # Check if user is logged in
+        if 'user_id' not in session:
+            if request.is_json:
+                return jsonify({'error': 'Authentication required'}), 401
+            else:
+                return redirect(url_for('auth.login_page'))
+
+    # Add security headers
+    @app.after_request
+    def set_security_headers(response):
+        """Set security headers on all responses"""
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+        return response
 
     # Log incoming requests (method, path, remote addr, params/body)
     @app.before_request

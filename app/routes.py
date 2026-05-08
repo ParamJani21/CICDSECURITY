@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request, current_app
+from flask import Blueprint, render_template, jsonify, request, current_app, session, redirect, url_for
 import sys
 import os
 
@@ -11,11 +11,21 @@ from modules.history import get_scan_history, get_history_stats, get_scan_detail
 from modules.settings import (get_settings, get_integration_status, 
                              get_github_credentials, save_github_credentials)
 from modules.scan_controller import trigger_scan
+from auth.decorators import require_login
 
 bp = Blueprint('main', __name__)
 
 
 @bp.route('/')
+def index():
+    """Main route - redirect to login if not authenticated, otherwise show dashboard"""
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login_page'))
+    return redirect(url_for('main.dashboard'))
+
+
+@bp.route('/dashboard')
+@require_login
 def dashboard():
     """Render main dashboard page"""
     overview_data = get_overview_data()
@@ -32,12 +42,14 @@ def dashboard():
 
 # API endpoints for tab data
 @bp.route('/api/overview')
+@require_login
 def api_overview():
     """API endpoint for overview data"""
     return jsonify(get_overview_data())
 
 
 @bp.route('/api/repos')
+@require_login
 def api_repos():
     """API endpoint for repositories"""
     return jsonify({
@@ -47,6 +59,7 @@ def api_repos():
 
 
 @bp.route('/api/branches/<path:owner>/<path:repo_name>')
+@require_login
 def api_branches(owner, repo_name):
     """API endpoint to fetch available branches for a repository"""
     try:
@@ -65,6 +78,7 @@ def api_branches(owner, repo_name):
 
 
 @bp.route('/api/history')
+@require_login
 def api_history():
     """API endpoint for scan history"""
     return jsonify({
@@ -74,6 +88,7 @@ def api_history():
 
 
 @bp.route('/api/history/<scan_id>')
+@require_login
 def api_scan_details(scan_id):
     """API endpoint for getting detailed scan information"""
     details = get_scan_details(scan_id)
@@ -95,6 +110,7 @@ def api_scan_details(scan_id):
 
 
 @bp.route('/api/history/delete', methods=['POST'])
+@require_login
 def api_delete_history():
     """API endpoint for deleting scans"""
     import os
@@ -133,6 +149,7 @@ def api_delete_history():
 
 
 @bp.route('/api/repos/scan', methods=['POST'])
+@require_login
 def api_trigger_repo_scan():
     """API endpoint for manual scan triggers."""
     try:
@@ -174,6 +191,7 @@ def api_trigger_repo_scan():
 
 
 @bp.route('/api/repos/scan-all', methods=['POST'])
+@require_login
 def api_scan_all_repos():
     """API endpoint to scan all repositories from GitHub App."""
     try:
@@ -257,6 +275,7 @@ def api_scan_all_repos():
 
 
 @bp.route('/api/runtime')
+@require_login
 def api_runtime():
     """Return runtime information to help diagnose environment (python executable, cwd, PATH)."""
     try:
@@ -275,6 +294,7 @@ def api_runtime():
 
 
 @bp.route('/api/settings')
+@require_login
 def api_settings():
     """API endpoint for settings"""
     return jsonify({
@@ -284,6 +304,7 @@ def api_settings():
 
 
 @bp.route('/api/settings/github', methods=['GET'])
+@require_login
 def api_get_github_credentials():
     """API endpoint to retrieve GitHub credentials"""
     try:
@@ -300,6 +321,7 @@ def api_get_github_credentials():
 
 
 @bp.route('/api/settings/github', methods=['POST'])
+@require_login
 def api_save_github_credentials():
     """API endpoint to save GitHub credentials"""
     try:
@@ -328,6 +350,7 @@ def api_save_github_credentials():
 
 
 @bp.route('/api/log', methods=['POST'])
+@require_login
 def api_client_log():
     """Accept client-side logs (UI events) and write them to server logs."""
     try:
@@ -361,6 +384,7 @@ def api_client_log():
 
 
 @bp.route('/api/export-report')
+@require_login
 def api_export_report():
     """Generate and download security scan report"""
     import json

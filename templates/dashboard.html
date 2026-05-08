@@ -32,6 +32,23 @@
                         <span class="tab-icon">⚙️</span> Settings
                     </button>
                 </nav>
+                <!-- User Menu -->
+                <div class="user-menu">
+                    <button class="user-menu-btn" id="user-menu-toggle">
+                        <span class="user-icon">👤</span>
+                        <span class="username" id="current-username">User</span>
+                        <span class="dropdown-arrow">▼</span>
+                    </button>
+                    <div class="user-dropdown" id="user-dropdown">
+                        <a href="/auth/change-password" class="dropdown-item">
+                            <span class="item-icon">🔐</span> Change Password
+                        </a>
+                        <hr class="dropdown-divider">
+                        <button class="dropdown-item logout-btn" onclick="logout()">
+                            <span class="item-icon">🚪</span> Logout
+                        </button>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -120,10 +137,9 @@
                             <div class="col-time">Timestamp</div>
                             <div class="col-repo">Repository</div>
                             <div class="col-branch">Branch</div>
-                            <div class="col-total">Total</div>
-                            <div class="col-severity">Severity</div>
-                            <div class="col-multi">Multi</div>
-                            <div class="col-action">Action</div>
+                             <div class="col-total">Total</div>
+                             <div class="col-severity">Severity</div>
+                             <div class="col-multi">Multi</div>
                         </div>
                         <div class="history-list" id="history-list">
                             <!-- History will be loaded here -->

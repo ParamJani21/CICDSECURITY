@@ -1076,6 +1076,7 @@ def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, re
     """
     Merge findings from all 3 tools (OpenGrep, TruffleHog, Trivy) into unified structure.
     Removes duplicates by file + line + issue type, but keeps all tool sources.
+    Excludes findings from .git/ directory (artifacts of scanning process, not repo findings).
     """
     logger.info('=' * 80)
     logger.info('🔄 MERGING FINDINGS FROM ALL TOOLS')
@@ -1084,6 +1085,13 @@ def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, re
     merged_findings = []
     seen_issues = {}
     finding_id = 1
+    
+    def should_exclude_finding(path):
+        """
+        Exclude findings from .git/ directory (artifacts of scan process).
+        These are not real repo findings, but rather artifacts from cloning with auth token.
+        """
+        return path.startswith('.git/') or path.startswith('.git\\') or '/.git/' in path or '\\.git\\' in path
     
     def normalize_severity(sev):
         sev_lower = str(sev).upper() if sev else 'INFO'
@@ -1117,6 +1125,12 @@ def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, re
     # Process OpenGrep
     for finding in (opengrep_results.get('results', []) or []):
         path = finding.get('path', 'unknown')
+        
+        # Skip .git/ directory findings (artifacts of scan process)
+        if should_exclude_finding(path):
+            logger.info(f'[Merge] 🚫 Skipping .git/ artifact: {path}')
+            continue
+        
         line = finding.get('start', {}).get('line', 0)
         check_id = finding.get('check_id', 'unknown')
         extra = finding.get('extra', {})
@@ -1156,6 +1170,12 @@ def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, re
             continue
         metadata = finding.get('SourceMetadata', {}).get('Data', {}).get('Filesystem', {})
         path = metadata.get('file', 'unknown')
+        
+        # Skip .git/ directory findings (artifacts of scan process)
+        if should_exclude_finding(path):
+            logger.info(f'[Merge] 🚫 Skipping .git/ artifact: {path}')
+            continue
+        
         line = metadata.get('line', 0)
         detector_name = finding.get('DetectorName', '')
         issue_type = get_issue_type(finding, 'trufflehog')
