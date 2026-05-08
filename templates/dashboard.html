@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CICDSECURITY Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=20260508_v5">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=20260509_v1">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles-base.css') }}?v=20260508">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles-components.css') }}?v=20260508">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles-responsive.css') }}?v=20260508">
@@ -197,6 +197,39 @@
                         <div class="filter-panel-footer">
                             <button class="btn-secondary" onclick="clearFilters()">Clear All</button>
                             <button class="btn-primary" onclick="applyFilters(); toggleFilterPanel();">Apply Filters</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Export Report Modal -->
+                    <div class="export-modal" id="export-modal">
+                        <div class="export-modal-content">
+                            <div class="export-modal-header">
+                                <h3>Export Report Options</h3>
+                                <button class="export-modal-close" onclick="closeExportModal()">&times;</button>
+                            </div>
+                            <div class="export-modal-body">
+                                <div class="export-section">
+                                    <label>Filter by Severity</label>
+                                    <div class="export-checkboxes">
+                                        <label class="export-checkbox"><input type="checkbox" id="export-critical" value="CRITICAL"><span class="severity-badge critical">CRITICAL</span></label>
+                                        <label class="export-checkbox"><input type="checkbox" id="export-high" value="HIGH"><span class="severity-badge high">HIGH</span></label>
+                                        <label class="export-checkbox"><input type="checkbox" id="export-medium" value="MEDIUM"><span class="severity-badge medium">MEDIUM</span></label>
+                                        <label class="export-checkbox"><input type="checkbox" id="export-low" value="LOW"><span class="severity-badge low">LOW</span></label>
+                                    </div>
+                                </div>
+                                <div class="export-section">
+                                    <label>Filter by Tool (leave empty for all)</label>
+                                    <div class="export-checkboxes">
+                                        <label class="export-checkbox"><input type="checkbox" id="export-opengrep" value="opengrep"> OpenGrep</label>
+                                        <label class="export-checkbox"><input type="checkbox" id="export-truffle" value="truffle"> TruffleHog</label>
+                                        <label class="export-checkbox"><input type="checkbox" id="export-trivy" value="trivy"> Trivy</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="export-modal-footer">
+                                <button class="btn-secondary" onclick="closeExportModal()">Cancel</button>
+                                <button class="btn-primary" onclick="confirmExport()">Export HTML Report</button>
+                            </div>
                         </div>
                     </div>
                     

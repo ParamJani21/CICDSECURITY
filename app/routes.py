@@ -479,37 +479,40 @@ def api_export_report():
             if not os.path.isdir(scan_path):
                 continue
             
-            # If tool filter, use raw tool files; else use merged.json
+            # If tool filter, filter merged.json by sources; else use all merged findings
             if tool_filter:
-                scan_data = {'scan_id': scan_dir, 'findings': [], 'summary': {'total_unique': 0, 'by_severity': {}}, 'repo_name': '', 'repo_owner': '', 'repo_branch': 'main', 'timestamp': ''}
                 merged_file = os.path.join(scan_path, 'merged.json')
                 if os.path.exists(merged_file):
                     try:
                         with open(merged_file, 'r') as f:
                             m = json.load(f)
+                            scan_data = {'scan_id': scan_dir, 'findings': [], 'summary': {'total_unique': 0, 'by_severity': {}}}
                             scan_data['repo_name'] = m.get('repo_name', '')
                             scan_data['repo_owner'] = m.get('repo_owner', '')
                             scan_data['repo_branch'] = m.get('repo_branch', 'main')
                             scan_data['timestamp'] = m.get('timestamp', scan_dir)
-                    except: pass
-                tool_files = {'opengrep': 'opengrep.json', 'truffle': 'truffle.json', 'trivy': 'trivy.json'}
-                for t, f in tool_files.items():
-                    if t in tool_filter:
-                        tf = os.path.join(scan_path, f)
-                        if os.path.exists(tf):
-                            try:
-                                with open(tf, 'r') as f:
-                                    td = json.load(f)
-                                    scan_data['findings'].extend(td.get('findings', []))
-                            except: continue
-                by_sev = {}
-                for f in scan_data['findings']:
-                    sev = f.get('severity', 'LOW').upper()
-                    by_sev[sev] = by_sev.get(sev, 0) + 1
-                scan_data['summary']['by_severity'] = by_sev
-                scan_data['summary']['total_unique'] = len(scan_data['findings'])
-                if scan_data['findings']:
-                    scans.append(scan_data)
+                            # Filter findings by tool/source
+                            for f in m.get('findings', []):
+                                sources = f.get('sources', [])
+                                # Check if any of the tool_filter is in sources
+                                # Normalize: truffle -> trufflehog, etc.
+                                for t in tool_filter:
+                                    if t == 'truffle' and 'trufflehog' in sources:
+                                        scan_data['findings'].append(f)
+                                        break
+                                    elif t in sources:
+                                        scan_data['findings'].append(f)
+                                        break
+                            by_sev = {}
+                            for f in scan_data['findings']:
+                                sev = f.get('severity', 'LOW').upper()
+                                by_sev[sev] = by_sev.get(sev, 0) + 1
+                            scan_data['summary']['by_severity'] = by_sev
+                            scan_data['summary']['total_unique'] = len(scan_data['findings'])
+                            if scan_data['findings']:
+                                scans.append(scan_data)
+                    except Exception:
+                        continue
             else:
                 merged_file = os.path.join(scan_path, 'merged.json')
                 if os.path.exists(merged_file):

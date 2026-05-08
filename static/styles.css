@@ -1635,3 +1635,110 @@ html, body {
 .filter-overlay.active {
     display: block;
 }
+
+/* Export Report Modal */
+.export-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 4000;
+    align-items: center;
+    justify-content: center;
+}
+.export-modal.active { display: flex; }
+.export-modal-content {
+    background: #1e293b;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 450px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    border: 1px solid #334155;
+}
+.export-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: #0f172a;
+    border-bottom: 1px solid #334155;
+    border-radius: 12px 12px 0 0;
+}
+.export-modal-header h3 { color: #f1f5f9; font-size: 1.1rem; margin: 0; }
+.export-modal-close {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+.export-modal-close:hover { color: #f1f5f9; }
+.export-modal-body { padding: 20px; }
+.export-section { margin-bottom: 16px; }
+.export-section > label {
+    display: block;
+    color: #94a3b8;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+.export-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; }
+.export-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #0f172a;
+    border: 1px solid #334155;
+}
+.export-checkbox:hover { border-color: #3b82f6; }
+.export-checkbox input { width: 14px; height: 14px; accent-color: #3b82f6; }
+.export-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px;
+    background: #0f172a;
+    border-top: 1px solid #334155;
+    border-radius: 0 0 12px 12px;
+}
+.export-modal-footer .btn-primary {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+.export-modal-footer .btn-primary:hover { background: #2563eb; }
+.export-modal-footer .btn-secondary {
+    background: #475569;
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+.export-modal-footer .btn-secondary:hover { background: #64748b; }
+.export-report-btn {
+    background: #10b981;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-left: 8px;
+}
+.export-report-btn:hover { background: #059669; }

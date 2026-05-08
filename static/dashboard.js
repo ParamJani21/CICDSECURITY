@@ -1562,3 +1562,27 @@ function toggleFilterPanel() {
     const panel = document.getElementById('filter-panel');
     panel.classList.toggle('active');
 }
+
+// ============ EXPORT REPORT MODAL ============
+function exportReport() {
+    document.getElementById('export-modal').classList.add('active');
+}
+function closeExportModal() {
+    document.getElementById('export-modal').classList.remove('active');
+}
+function confirmExport() {
+    const severity = [];
+    if (document.getElementById('export-critical').checked) severity.push('CRITICAL');
+    if (document.getElementById('export-high').checked) severity.push('HIGH');
+    if (document.getElementById('export-medium').checked) severity.push('MEDIUM');
+    if (document.getElementById('export-low').checked) severity.push('LOW');
+    const tool = [];
+    if (document.getElementById('export-opengrep').checked) tool.push('opengrep');
+    if (document.getElementById('export-truffle').checked) tool.push('truffle');
+    if (document.getElementById('export-trivy').checked) tool.push('trivy');
+    const params = new URLSearchParams();
+    if (severity.length) params.set('severity', severity.join(','));
+    if (tool.length) params.set('tool', tool.join(','));
+    closeExportModal();
+    window.location.href = '/api/export-report' + (params.toString() ? '?' + params.toString() : '');
+}
