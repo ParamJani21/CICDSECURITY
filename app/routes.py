@@ -60,8 +60,20 @@ def api_scan_details(scan_id):
     """API endpoint for getting detailed scan information"""
     details = get_scan_details(scan_id)
     if details:
-        return jsonify(details)
-    return jsonify({'error': 'Scan not found'}), 404
+        # If files exist but are incomplete, return 202 (Accepted) to indicate retry
+        if details.get('errors') and not details.get('files'):
+            return jsonify({
+                'status': 'processing',
+                'message': 'Scan results still being written. Please retry in a moment.',
+                'errors': details.get('errors', [])
+            }), 202
+        # Return partial data if some files are incomplete
+        if details.get('errors') and details.get('files'):
+            response = jsonify(details)
+            response.status_code = 206  # 206 Partial Content
+            return response
+        return jsonify(details), 200
+    return jsonify({'error': 'Scan not found', 'status': 'not_found'}), 404
 
 
 @bp.route('/api/history/delete', methods=['POST'])

@@ -149,20 +149,41 @@ def get_scan_details(scan_id):
         # Read all JSON files
         result = {
             'scan_id': scan_id,
-            'files': {}
+            'files': {},
+            'errors': [],
+            'is_complete': True
         }
         
         for filename in ['merged.json', 'opengrep.json', 'truffle.json', 'trivy.json']:
             filepath = os.path.join(scan_path, filename)
             if os.path.exists(filepath):
                 try:
-                    with open(filepath, 'r') as f:
-                        result['files'][filename.replace('.json', '')] = json.load(f)
-                except:
-                    pass
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        file_content = f.read()
+                        if file_content.strip():  # Check if file is not empty
+                            data = json.loads(file_content)
+                            result['files'][filename.replace('.json', '')] = data
+                        else:
+                            result['errors'].append(f"{filename}: empty file (still being written?)")
+                            result['is_complete'] = False
+                except json.JSONDecodeError as je:
+                    result['errors'].append(f"{filename}: invalid JSON - {str(je)}")
+                    result['is_complete'] = False
+                except IOError as ie:
+                    # File might be locked/being written
+                    result['errors'].append(f"{filename}: file access error - {str(ie)}")
+                    result['is_complete'] = False
+                except Exception as e:
+                    result['errors'].append(f"{filename}: read error - {str(e)}")
+                    result['is_complete'] = False
+        
+        # If no files were successfully read, return None with error info
+        if not result['files']:
+            print(f"Warning: No files found for scan {scan_id}. Errors: {result['errors']}")
+            return result
         
         return result
         
     except Exception as e:
-        print(f"Error getting scan details: {e}")
+        print(f"Error getting scan details for {scan_id}: {e}")
         return None

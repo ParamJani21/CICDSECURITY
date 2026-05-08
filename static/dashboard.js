@@ -2,6 +2,12 @@
    CICDSECURITY Dashboard JavaScript
    ============================================ */
 
+// Retry tracking for findings loading
+const findingsRetryTracker = new Map();
+const MAX_RETRIES = 5;
+const INITIAL_RETRY_DELAY = 500; // ms
+const INITIAL_LOAD_DELAY = 300; // ms - increased from 100ms to ensure DOM is ready
+
 // ============ Tab Management ============
 document.addEventListener('DOMContentLoaded', function() {
     sendClientLog('page_domcontentloaded', { url: window.location.pathname, activeTab: localStorage.getItem('activeTab') || 'overview' });
@@ -577,13 +583,13 @@ function loadHistory() {
                                         <h5>All Findings from merged.json (${total})</h5>
                                         <div class="findings-loading">Loading findings...</div>
                                     </div>
-                                </div>
-                            </div>
-                        </div>`;
-                    
-                    // Load findings via API
-                    setTimeout(() => loadScanFindings(scan.scan_id), 100);
-                });
+                                 </div>
+                             </div>
+                         </div>`;
+                     
+                     // Load findings via API after DOM is ready
+                     setTimeout(() => loadScanFindings(scan.scan_id), INITIAL_LOAD_DELAY);
+                 });
             } else {
                 html = '<div style="grid-column: 1 / -1; padding: 2rem; text-align: center; color: #64748b;">No scans found. Trigger a scan to see results here.</div>';
             }
@@ -617,37 +623,98 @@ function loadHistory() {
 function loadScanFindings(scanId) {
     const container = document.getElementById('findings-' + scanId);
     if (!container) {
-        console.log('Container not found for:', 'findings-' + scanId);
+        console.error('❌ Container NOT found for:', 'findings-' + scanId);
+        console.log('Available IDs:', Array.from(document.querySelectorAll('[id^="findings-"]')).map(el => el.id));
         return;
     }
     
-    console.log('Loading findings for:', scanId);
+    console.log('✓ Loading findings for:', scanId);
+    console.log('  Container found:', container.className);
+    
+    // Initialize retry tracker for this scan
+    if (!findingsRetryTracker.has(scanId)) {
+        findingsRetryTracker.set(scanId, { attempts: 0, lastError: null });
+    }
     
     fetch('/api/history/' + scanId)
-        .then(response => response.json())
+        .then(response => {
+            console.log(`⬇️  API Response for ${scanId}: Status ${response.status}`);
+            
+            // Get the retry info
+            const retryInfo = findingsRetryTracker.get(scanId);
+            
+            // Handle different response statuses
+            if (response.status === 202) {
+                // 202 Accepted - file still being written, schedule retry
+                console.log(`⏳ Scan ${scanId} still processing. Scheduling retry...`);
+                retryInfo.attempts++;
+                if (retryInfo.attempts < MAX_RETRIES) {
+                    const delay = INITIAL_RETRY_DELAY * Math.pow(1.5, retryInfo.attempts - 1);
+                    console.log(`  → Retry attempt ${retryInfo.attempts}/${MAX_RETRIES} after ${Math.round(delay)}ms`);
+                    setTimeout(() => loadScanFindings(scanId), delay);
+                } else {
+                    container.innerHTML = '<p style="color:#f87171;"><strong>Still loading findings...</strong> Results may still be being processed. Please try again in a few moments.</p>';
+                }
+                return null;
+            }
+            
+            if (response.status === 206) {
+                // 206 Partial Content - some files loaded, some incomplete
+                console.log(`⚠️  Partial data for ${scanId}, proceeding with available data`);
+                retryInfo.attempts = 0; // Reset attempts since we got some data
+                return response.json();
+            }
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            console.log(`✓ Got 200 response for ${scanId}`);
+            retryInfo.attempts = 0; // Reset on successful response
+            return response.json();
+        })
         .then(data => {
+            if (data === null) {
+                // This happens on 202 response - we're handling the retry above
+                console.log(`  (202 response - retry scheduled)`);
+                return;
+            }
+            
+            console.log(`📦 Processing data for ${scanId}:`, Object.keys(data));
+            
             // Handle both response formats
             let findings = [];
             if (data.files && data.files.merged) {
                 const merged = data.files.merged;
+                console.log(`  merged.json found, findings type:`, typeof merged.findings);
                 if (Array.isArray(merged.findings)) {
                     findings = merged.findings;
+                    console.log(`    ✓ findings is array: ${findings.length} items`);
                 } else if (merged.findings && typeof merged.findings === 'object') {
                     findings = Object.values(merged.findings);
+                    console.log(`    ✓ findings is object, converted to array: ${findings.length} items`);
+                } else {
+                    console.log(`    ✗ findings is`, typeof merged.findings);
                 }
             } else if (data.findings) {
+                console.log(`  findings found at top level, type:`, typeof data.findings);
                 findings = Array.isArray(data.findings) ? data.findings : Object.values(data.findings);
+            } else {
+                console.log(`  ✗ No findings found in response`);
             }
             
             if (!Array.isArray(findings)) {
+                console.log(`  ⚠️  findings is not array after processing:`, typeof findings);
                 findings = [];
             }
             
             if (!findings || findings.length === 0) {
+                console.log(`  📭 No findings (empty)`);
                 container.innerHTML = '<h5>All Findings from merged.json</h5><p style="color:#94a3b8;font-style:italic;">No findings found</p>';
                 return;
             }
             
+            console.log(`  ✅ Rendering ${findings.length} findings`);
             let findingsHtml = '<h5>All Findings from merged.json (' + findings.length + ')</h5>';
             
             findings.forEach((f, idx) => {
@@ -673,10 +740,24 @@ function loadScanFindings(scanId) {
             });
             
             container.innerHTML = findingsHtml;
+            console.log(`✅ DOM updated successfully for ${scanId}`);
         })
         .catch(err => {
-            console.error('Error loading findings:', err);
-            container.innerHTML = '<p style="color:#94a3b8;">Error loading findings</p>';
+            const retryInfo = findingsRetryTracker.get(scanId);
+            retryInfo.lastError = err.message;
+            retryInfo.attempts++;
+            
+            console.error(`❌ Error loading findings for ${scanId}:`, err.message);
+            console.error(`  Attempt ${retryInfo.attempts}/${MAX_RETRIES}`);
+            
+            if (retryInfo.attempts < MAX_RETRIES) {
+                const delay = INITIAL_RETRY_DELAY * Math.pow(1.5, retryInfo.attempts - 1);
+                console.log(`  → Retrying in ${Math.round(delay)}ms...`);
+                setTimeout(() => loadScanFindings(scanId), delay);
+            } else {
+                console.error(`❌ Max retries reached for ${scanId}`);
+                container.innerHTML = `<p style="color:#f87171;"><strong>Failed to load findings</strong><br><code style="font-size:12px;">${retryInfo.lastError}</code></p>`;
+            }
         });
 }
 
