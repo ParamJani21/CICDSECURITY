@@ -348,7 +348,6 @@
                                     <th>Full Name</th>
                                     <th>Department</th>
                                     <th>Role</th>
-                                    <th>Status</th>
                                     <th>Created</th>
                                     <th>Last Login</th>
                                     <th>Actions</th>
@@ -393,18 +392,12 @@
                                 <input type="text" id="user-department">
                             </div>
                             <div class="form-group">
-                                <label for="user-role">Role</label>
-                                <select id="user-role">
-                                    <option value="viewer">Viewer</option>
-                                    <option value="operator">Operator</option>
-                                    <option value="admin">Admin</option>
-                                </select>
-                            </div>
-                            <div class="form-group" id="is-active-group" style="display: none;">
-                                <label>
-                                    <input type="checkbox" id="user-is-active"> Active
-                                </label>
-                            </div>
+                                 <label for="user-role">Role</label>
+                                 <select id="user-role">
+                                     <option value="operator">Operator</option>
+                                     <option value="admin">Admin</option>
+                                 </select>
+                             </div>
                             <div class="modal-actions">
                                 <button type="button" class="btn-secondary" onclick="closeUserModal()">Cancel</button>
                                 <button type="submit" class="btn-primary">Save</button>

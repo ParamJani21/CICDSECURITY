@@ -44,7 +44,7 @@ class User(db.Model):
     last_login = db.Column(db.DateTime)
     
     # Role
-    role = db.Column(db.String(50), default='admin')  # admin, viewer, operator
+    role = db.Column(db.String(50), default='admin')  # admin, operator
     
     # GitHub Credentials (Encrypted)
     encrypted_github_app_id = db.Column(db.Text)  # Encrypted GitHub App ID
@@ -54,7 +54,6 @@ class User(db.Model):
     # User Metadata (for User Management)
     full_name = db.Column(db.String(255))  # User's full name
     department = db.Column(db.String(255))  # Department/team
-    is_active = db.Column(db.Boolean, default=True)  # Can be disabled by admin
     
     # Relationships
     preferences = db.relationship('UserPreferences', uselist=False, backref='user', 

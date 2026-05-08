@@ -8,6 +8,10 @@
 const CACHE_TTL = 30000; // 30 seconds
 const scanFindingsCache = {};
 
+// Current user info
+let currentUser = null;
+let currentUserRole = null;
+
 // Debounce function for manual refresh
 function debounce(func, delay) {
     let timeoutId;
@@ -73,6 +77,7 @@ const RETRY_DELAY = 1000; // 1 second
 // ============ Tab Management ============
 document.addEventListener('DOMContentLoaded', function() {
     sendClientLog('page_domcontentloaded', { url: window.location.pathname, activeTab: localStorage.getItem('activeTab') || 'overview' });
+    loadCurrentUser();
     initializeTabs();
     updateTimestamps();
     loadDynamicContent();
@@ -98,6 +103,27 @@ function initializeTabs() {
     const lastActiveTab = localStorage.getItem('activeTab') || 'overview';
     switchTab(lastActiveTab);
 }
+
+// Load current user info
+function loadCurrentUser() {
+    fetch('/api/me', { credentials: 'include' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.user) {
+                currentUser = data.user;
+                currentUserRole = data.user.role;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading current user:', error);
+        });
+}
+
+// Check if user can start scans (operator or admin only)
+function canStartScan() {
+    return currentUserRole === 'operator' || currentUserRole === 'admin';
+}
+
 
 function switchTab(tabName) {
     sendClientLog('switchTab_start', { tabName });
@@ -200,6 +226,9 @@ function loadTabContent(tabName) {
             break;
         case 'settings':
             loadSettings();
+            break;
+        case 'users':
+            loadUsers();
             break;
         default:
             break;
@@ -623,10 +652,18 @@ function startScanAllRepos(scanTypes) {
 }
 
 function scanAllRepos() {
+    if (!canStartScan()) {
+        showToast('Only operators and admins can start scans', 'error');
+        return;
+    }
     openScanModal([], true);
 }
 
 function triggerManualScan(repoId, repoName, repoOwner, repoUrl) {
+    if (!canStartScan()) {
+        showToast('Only operators and admins can start scans', 'error');
+        return;
+    }
     const selectedBranch = selectedBranches.get(parseInt(repoId)) || 'main';
     
     const repo = {
@@ -1406,22 +1443,22 @@ function renderHistoryItem(scan) {
 // ============ USER MANAGEMENT FUNCTIONS ============
 
 function loadUsers() {
-    fetch('/api/users', { credentials: 'include' })
-    .then(response => {
-        if (response.status === 403) {
-            alert('Access denied. Admin only.');
-            return;
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data && data.users) {
-            displayUsers(data.users);
-        }
-    })
-    .catch(error => {
-        console.error('Error loading users:', error);
-    });
+     fetch('/api/users', { credentials: 'include' })
+     .then(response => {
+         if (response.status === 403) {
+             showToast('Access denied. Admin only.', 'error');
+             return;
+         }
+         return response.json();
+     })
+     .then(data => {
+         if (data && data.users) {
+             displayUsers(data.users);
+         }
+     })
+     .catch(error => {
+         console.error('Error loading users:', error);
+     });
 }
 
 function displayUsers(users) {
@@ -1434,30 +1471,28 @@ function displayUsers(users) {
     }
     
     tbody.innerHTML = users.map(user => `
-        <tr>
-            <td>${user.username}</td>
-            <td>${user.email || '-'}</td>
-            <td>${user.full_name || '-'}</td>
-            <td>${user.department || '-'}</td>
-            <td><span class="user-role-badge ${user.role}">${user.role}</span></td>
-            <td><span class="user-status-badge ${user.is_active ? 'active' : 'disabled'}">${user.is_active ? 'Active' : 'Disabled'}</span></td>
-            <td>${user.created_at ? user.created_at.split('T')[0] : '-'}</td>
-            <td>${user.last_login ? user.last_login.split('T')[0] : 'Never'}</td>
-            <td class="user-actions">
-                <button class="edit-btn" onclick="editUser(${user.id})">Edit</button>
-                <button class="disable-btn" onclick="deleteUser(${user.id})">${user.is_active ? 'Disable' : 'Enable'}</button>
-            </td>
-        </tr>
+         <tr>
+             <td>${user.username}</td>
+             <td>${user.email || '-'}</td>
+             <td>${user.full_name || '-'}</td>
+             <td>${user.department || '-'}</td>
+             <td><span class="user-role-badge ${user.role}">${user.role}</span></td>
+             <td>${user.created_at ? user.created_at.split('T')[0] : '-'}</td>
+             <td>${user.last_login ? user.last_login.split('T')[0] : 'Never'}</td>
+             <td class="user-actions">
+                 <button class="edit-btn" onclick="editUser(${user.id})">Edit</button>
+                 <button class="delete-btn" onclick="deleteUser(${user.id})">Delete</button>
+             </td>
+         </tr>
     `).join('');
 }
 
 function showCreateUserModal() {
-    document.getElementById('user-modal-title').textContent = 'Create User';
-    document.getElementById('user-id').value = '';
-    document.getElementById('user-form').reset();
-    document.getElementById('password-group').style.display = 'block';
-    document.getElementById('is-active-group').style.display = 'none';
-    document.getElementById('user-modal').style.display = 'block';
+     document.getElementById('user-modal-title').textContent = 'Create User';
+     document.getElementById('user-id').value = '';
+     document.getElementById('user-form').reset();
+     document.getElementById('password-group').style.display = 'block';
+     document.getElementById('user-modal').style.display = 'block';
 }
 
 function closeUserModal() {
@@ -1474,36 +1509,34 @@ function editUser(userId) {
             return;
         }
         
-        document.getElementById('user-modal-title').textContent = 'Edit User';
-        document.getElementById('user-id').value = user.id;
-        document.getElementById('user-username').value = user.username;
-        document.getElementById('user-email').value = user.email || '';
-        document.getElementById('user-fullname').value = user.full_name || '';
-        document.getElementById('user-department').value = user.department || '';
-        document.getElementById('user-role').value = user.role;
-        document.getElementById('user-is-active').checked = user.is_active;
-        
-        document.getElementById('password-group').style.display = 'none';
-        document.getElementById('is-active-group').style.display = 'block';
-        document.getElementById('user-modal').style.display = 'block';
+         document.getElementById('user-modal-title').textContent = 'Edit User';
+         document.getElementById('user-id').value = user.id;
+         document.getElementById('user-username').value = user.username;
+         document.getElementById('user-email').value = user.email || '';
+         document.getElementById('user-fullname').value = user.full_name || '';
+         document.getElementById('user-department').value = user.department || '';
+         document.getElementById('user-role').value = user.role;
+         
+         document.getElementById('password-group').style.display = 'none';
+         document.getElementById('user-modal').style.display = 'block';
     });
 }
 
 function deleteUser(userId) {
-    if (!confirm('Are you sure you want to disable this user?')) return;
-    
-    fetch('/api/users/' + userId, {
-        method: 'DELETE',
-        credentials: 'include'
-    })
-    .then(response => response.json())
-    .then(data => {
-        alert(data.message || data.status);
-        loadUsers();
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Failed to disable user');
+     if (!confirm('Are you sure you want to delete this user?')) return;
+     
+     fetch('/api/users/' + userId, {
+         method: 'DELETE',
+         credentials: 'include'
+     })
+     .then(response => response.json())
+     .then(data => {
+         alert(data.message || data.status);
+         loadUsers();
+     })
+     .catch(error => {
+         console.error('Error:', error);
+         alert('Failed to delete user');
     });
 }
 
@@ -1523,8 +1556,6 @@ document.getElementById('user-form').addEventListener('submit', function(e) {
     
     if (!isEdit) {
         userData.password = document.getElementById('user-password').value;
-    } else {
-        userData.is_active = document.getElementById('user-is-active').checked;
     }
     
     const url = isEdit ? '/api/users/' + userId : '/api/users';
@@ -1536,25 +1567,37 @@ document.getElementById('user-form').addEventListener('submit', function(e) {
         credentials: 'include',
         body: JSON.stringify(userData)
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            alert(data.message);
+    .then(response => {
+        console.log('Response status:', response.status);
+        return response.json().then(data => ({status: response.status, body: data}));
+    })
+    .then(result => {
+        console.log('Response:', result);
+        if (result.status === 200 && result.body.status === 'success') {
+            alert(result.body.message);
             closeUserModal();
             loadUsers();
         } else {
-            alert(data.message || 'Error');
+            alert(result.body.message || 'Error: ' + result.body.error);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Failed to save user');
+        alert('Failed to save user: ' + error.message);
     });
 });
 
 // Load users when users tab is shown
 document.querySelector('[data-tab="users"]').addEventListener('click', function() {
     loadUsers();
+});
+
+// Also load users on page load if users tab is visible
+document.addEventListener('DOMContentLoaded', function() {
+    const usersTab = document.getElementById('users-tab');
+    if (usersTab && usersTab.classList.contains('active')) {
+        loadUsers();
+    }
 });
 
 // ============ FILTER PANEL TOGGLE ============

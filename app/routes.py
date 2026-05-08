@@ -5,6 +5,7 @@ import os
 # Add parent directory to path for module imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from models.database import db
 from modules.overview import get_overview_data
 from modules.repos import get_repositories, get_repository_stats, get_repository_branches
 from modules.history import get_scan_history, get_history_stats, get_scan_details
@@ -995,6 +996,27 @@ def api_export_report():
 
 # ============ USER MANAGEMENT ENDPOINTS ============
 
+@bp.route('/api/me')
+@require_login
+def api_get_current_user():
+    """Get current user info"""
+    user = get_current_user()
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User not found'}), 404
+    
+    return jsonify({
+        'status': 'success',
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': user.role,
+            'full_name': user.full_name,
+            'department': user.department
+        }
+    })
+
+
 @bp.route('/api/users', methods=['GET'])
 @require_login
 @require_admin
@@ -1007,15 +1029,14 @@ def api_get_users():
     return jsonify({
         'status': 'success',
         'users': [{
-            'id': u.id,
-            'username': u.username,
-            'email': u.email,
-            'role': u.role,
-            'full_name': u.full_name,
-            'department': u.department,
-            'is_active': u.is_active,
-            'created_at': u.created_at.isoformat() if u.created_at else None,
-            'last_login': u.last_login.isoformat() if u.last_login else None
+             'id': u.id,
+             'username': u.username,
+             'email': u.email,
+             'role': u.role,
+             'full_name': u.full_name,
+             'department': u.department,
+             'created_at': u.created_at.isoformat() if u.created_at else None,
+             'last_login': u.last_login.isoformat() if u.last_login else None
         } for u in users]
     })
 
@@ -1036,7 +1057,7 @@ def api_create_user():
     username = data.get('username', '').strip()
     email = data.get('email', '').strip()
     password = data.get('password', '')
-    role = data.get('role', 'viewer')
+    role = data.get('role', 'operator')
     full_name = data.get('full_name', '').strip()
     department = data.get('department', '').strip()
     
@@ -1064,8 +1085,8 @@ def api_create_user():
         return jsonify({'status': 'error', 'message': 'Email already exists'}), 400
     
     # Validate role
-    if role not in ['admin', 'viewer', 'operator']:
-        role = 'viewer'
+    if role not in ['admin', 'operator']:
+        role = 'operator'
     
     try:
         # Create user
@@ -1076,8 +1097,7 @@ def api_create_user():
             role=role,
             full_name=full_name if full_name else None,
             department=department if department else None,
-            is_first_login=True,
-            is_active=True
+            is_first_login=True
         )
         
         db.session.add(new_user)
@@ -1131,9 +1151,6 @@ def api_update_user(user_id):
     if 'department' in data:
         user.department = data['department'] if data['department'] else None
     
-    if 'is_active' in data:
-        user.is_active = bool(data['is_active'])
-    
     try:
         db.session.commit()
         current_app.logger.info(f'User {user.username} updated by admin')
@@ -1151,26 +1168,26 @@ def api_update_user(user_id):
 @require_login
 @require_admin
 def api_delete_user(user_id):
-    """Disable user (soft delete)"""
+    """Delete a user (admin only)"""
     from models.database import User
     
     user = User.query.get(user_id)
     if not user:
         return jsonify({'status': 'error', 'message': 'User not found'}), 404
     
-    # Prevent disabling yourself
+    # Prevent deleting yourself
     current_user = get_current_user()
     if current_user and current_user.id == user_id:
-        return jsonify({'status': 'error', 'message': 'Cannot disable your own account'}), 400
+        return jsonify({'status': 'error', 'message': 'Cannot delete your own account'}), 400
     
     try:
-        user.is_active = False
+        db.session.delete(user)
         db.session.commit()
-        current_app.logger.info(f'User {user.username} disabled by admin')
+        current_app.logger.info(f'User {user.username} deleted by admin')
         
         return jsonify({
             'status': 'success',
-            'message': f'User {user.username} has been disabled'
+            'message': f'User {user.username} has been deleted'
         })
     except Exception as e:
         db.session.rollback()

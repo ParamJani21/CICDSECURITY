@@ -69,9 +69,6 @@ def create_app():
                 if 'department' not in columns:
                     db.session.execute(text("ALTER TABLE users ADD COLUMN department VARCHAR(255)"))
                     app.logger.info('Added column: department')
-                if 'is_active' not in columns:
-                    db.session.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT 1"))
-                    app.logger.info('Added column: is_active')
                 
                 db.session.commit()
             except Exception as col_e:
