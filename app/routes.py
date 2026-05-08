@@ -460,6 +460,10 @@ def api_export_report():
     from flask import make_response
     
     try:
+        # Get filter params
+        severity_filter = request.args.get('severity', '').split(',') if request.args.get('severity') else []
+        tool_filter = request.args.get('tool', '').split(',') if request.args.get('tool') else []
+        
         # Get logs directory
         module_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(module_dir)
@@ -468,22 +472,68 @@ def api_export_report():
         if not os.path.exists(logs_dir):
             return jsonify({'error': 'No scan data found'}), 404
         
-        # Read all merged.json files
+        # Read scans based on filters
         scans = []
         for scan_dir in os.listdir(logs_dir):
             scan_path = os.path.join(logs_dir, scan_dir)
             if not os.path.isdir(scan_path):
                 continue
             
-            merged_file = os.path.join(scan_path, 'merged.json')
-            if os.path.exists(merged_file):
-                try:
-                    with open(merged_file, 'r') as f:
-                        scan_data = json.load(f)
-                        scan_data['scan_id'] = scan_dir
-                        scans.append(scan_data)
-                except Exception:
-                    continue
+            # If tool filter, use raw tool files; else use merged.json
+            if tool_filter:
+                scan_data = {'scan_id': scan_dir, 'findings': [], 'summary': {'total_unique': 0, 'by_severity': {}}, 'repo_name': '', 'repo_owner': '', 'repo_branch': 'main', 'timestamp': ''}
+                merged_file = os.path.join(scan_path, 'merged.json')
+                if os.path.exists(merged_file):
+                    try:
+                        with open(merged_file, 'r') as f:
+                            m = json.load(f)
+                            scan_data['repo_name'] = m.get('repo_name', '')
+                            scan_data['repo_owner'] = m.get('repo_owner', '')
+                            scan_data['repo_branch'] = m.get('repo_branch', 'main')
+                            scan_data['timestamp'] = m.get('timestamp', scan_dir)
+                    except: pass
+                tool_files = {'opengrep': 'opengrep.json', 'truffle': 'truffle.json', 'trivy': 'trivy.json'}
+                for t, f in tool_files.items():
+                    if t in tool_filter:
+                        tf = os.path.join(scan_path, f)
+                        if os.path.exists(tf):
+                            try:
+                                with open(tf, 'r') as f:
+                                    td = json.load(f)
+                                    scan_data['findings'].extend(td.get('findings', []))
+                            except: continue
+                by_sev = {}
+                for f in scan_data['findings']:
+                    sev = f.get('severity', 'LOW').upper()
+                    by_sev[sev] = by_sev.get(sev, 0) + 1
+                scan_data['summary']['by_severity'] = by_sev
+                scan_data['summary']['total_unique'] = len(scan_data['findings'])
+                if scan_data['findings']:
+                    scans.append(scan_data)
+            else:
+                merged_file = os.path.join(scan_path, 'merged.json')
+                if os.path.exists(merged_file):
+                    try:
+                        with open(merged_file, 'r') as f:
+                            scan_data = json.load(f)
+                            scan_data['scan_id'] = scan_dir
+                            scans.append(scan_data)
+                    except Exception:
+                        continue
+        
+        # Apply severity filter
+        if severity_filter:
+            for scan in scans:
+                scan['findings'] = [f for f in scan.get('findings', []) if f.get('severity', 'LOW').upper() in severity_filter]
+                by_sev = {}
+                for f in scan['findings']:
+                    sev = f.get('severity', 'LOW').upper()
+                    by_sev[sev] = by_sev.get(sev, 0) + 1
+                scan['summary']['by_severity'] = by_sev
+                scan['summary']['total_unique'] = len(scan['findings'])
+        
+        # Remove scans with no findings after filtering
+        scans = [s for s in scans if s.get('summary', {}).get('total_unique', 0) > 0]
         
         # Sort scans: findings first, then clean scans
         scans_with_findings = [s for s in scans if s.get('summary', {}).get('total_unique', 0) > 0]

@@ -328,16 +328,19 @@
 }
 
 .table-header {
-    display: grid;
-    gap: 1rem;
-    padding: 1rem;
-    background: rgba(30, 41, 59, 0.95);
-    border-bottom: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 10px 8px;
+    background: #0f172a;
+    border-bottom: 2px solid #334155;
     font-weight: 600;
-    color: var(--text-primary);
-    font-size: 0.85rem;
+    color: #94a3b8;
+    font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    gap: 0;
+    flex-shrink: 0;
+    min-width: 100%;
 }
 
 .table-row {
@@ -364,12 +367,12 @@
 
 .repos-grid .table-header,
 .repos-grid .table-row {
-    grid-template-columns: 2fr 1fr 1fr 1fr 1.2fr 1.5fr;
+    grid-template-columns: 1fr 100px 120px 80px;
 }
 
 .history-grid .table-header,
 .history-grid .table-row {
-    grid-template-columns: 1.5fr 1.5fr 1.2fr 1fr;
+    grid-template-columns: 40px 140px 1fr 90px 60px 160px 50px;
 }
 
 .col-repo, .col-name, .col-time { flex: 1; }
