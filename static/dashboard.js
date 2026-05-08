@@ -254,7 +254,11 @@ function renderScansChart() {
                             grid: { color: '#334155' },
                             beginAtZero: true
                         }
-                    }
+                    },
+                    // Fixed bar width instead of stretching
+                    barThickness: 35,
+                    categoryPercentage: 0.7,
+                    barPercentage: 0.95
                 }
             });
         })

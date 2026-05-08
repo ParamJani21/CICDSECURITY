@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CICDSECURITY Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles-base.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles-components.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles-responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=20260508_v3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles-base.css') }}?v=20260508">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles-components.css') }}?v=20260508">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles-responsive.css') }}?v=20260508">>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 </head>
 <body>
@@ -45,7 +45,9 @@
                         <div class="summary-section chart-section">
                             <h2>Recent Scan Results</h2>
                             <div class="chart-container">
-                                <canvas id="scansChart"></canvas>
+                                <div class="chart-wrapper">
+                                    <canvas id="scansChart"></canvas>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -237,6 +239,6 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='dashboard.js') }}?v=20260508_v2"></script>
+    <script src="{{ url_for('static', filename='dashboard.js') }}?v=20260508_v3"></script>
 </body>
 </html>

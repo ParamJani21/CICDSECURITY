@@ -259,13 +259,84 @@ def get_repository_by_id(repo_id):
 
 
 def get_repository_stats():
-    """Get aggregate statistics for all repositories"""
+    """Get aggregate statistics for all repositories based on scan history"""
     repos = get_repositories()
-    return {
-        'total': 0,
-        'passed': 0,
-        'failed': 0,
-        'warning': 0,
-        'avg_coverage': 0,
-        'total_issues': 0
-    }
+    
+    if not repos:
+        return {
+            'total': 0,
+            'passed': 0,
+            'failed': 0,
+            'warning': 0,
+            'avg_coverage': 0,
+            'total_issues': 0
+        }
+    
+    # Import here to avoid circular imports
+    from modules.history import get_scan_history
+    
+    try:
+        # Get all scan history
+        history = get_scan_history()
+        
+        # Create a mapping of repo names to their latest scan
+        repo_scan_map = {}
+        for scan in history:
+            repo_name = scan.get('repository', '')
+            # Only keep the latest scan for each repo
+            if repo_name not in repo_scan_map:
+                repo_scan_map[repo_name] = scan
+        
+        total = len(repos)
+        passed = 0
+        failed = 0
+        warning = 0
+        total_issues = 0
+        
+        # Analyze each repo
+        for repo in repos:
+            repo_name = repo.get('name', '')
+            repo_owner = repo.get('owner', '')
+            full_repo_name = f"{repo_owner}/{repo_name}" if repo_owner else repo_name
+            
+            # Check if repo has been scanned
+            if full_repo_name in repo_scan_map:
+                scan = repo_scan_map[full_repo_name]
+                severity = scan.get('severity', {})
+                
+                critical = severity.get('CRITICAL', 0)
+                high = severity.get('HIGH', 0)
+                medium = severity.get('MEDIUM', 0)
+                total_findings = scan.get('total_findings', 0)
+                
+                total_issues += total_findings
+                
+                # Categorize repo status
+                if critical > 0:
+                    failed += 1  # Critical issues = Failed
+                elif high > 0:
+                    warning += 1  # High issues = Warning
+                else:
+                    passed += 1  # No critical/high = Passed
+            else:
+                # Repo with no scans - consider as "passed" (no issues found)
+                passed += 1
+        
+        return {
+            'total': total,
+            'passed': passed,
+            'failed': failed,
+            'warning': warning,
+            'avg_coverage': 0,  # Not currently tracked
+            'total_issues': total_issues
+        }
+    except Exception as e:
+        print(f"Error calculating repository stats: {e}")
+        return {
+            'total': len(repos),
+            'passed': 0,
+            'failed': 0,
+            'warning': 0,
+            'avg_coverage': 0,
+            'total_issues': 0
+        }
