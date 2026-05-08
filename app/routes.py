@@ -6,7 +6,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from modules.overview import get_overview_data
-from modules.repos import get_repositories, get_repository_stats
+from modules.repos import get_repositories, get_repository_stats, get_repository_branches
 from modules.history import get_scan_history, get_history_stats, get_scan_details
 from modules.settings import (get_settings, get_integration_status, 
                              get_github_credentials, save_github_credentials)
@@ -44,6 +44,24 @@ def api_repos():
         'repositories': get_repositories(),
         'stats': get_repository_stats()
     })
+
+
+@bp.route('/api/branches/<path:owner>/<path:repo_name>')
+def api_branches(owner, repo_name):
+    """API endpoint to fetch available branches for a repository"""
+    try:
+        branches = get_repository_branches(owner, repo_name)
+        return jsonify({
+            'branches': branches,
+            'status': 'success'
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error fetching branches for {owner}/{repo_name}: {e}")
+        return jsonify({
+            'branches': [],
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 
 @bp.route('/api/history')
@@ -166,48 +184,69 @@ def api_scan_all_repos():
         
         current_app.logger.info('Scan all repos requested from %s | scan_types=%s', request.remote_addr, scan_types)
         
-        # Get all repositories from GitHub App
-        repos = get_repositories()
+        # Check if repos with branch info are provided in the request
+        repos_from_request = payload.get('repos', None)
         
-        if not repos or len(repos) == 0:
-            return jsonify({'status': 'error', 'message': 'No repositories found'}), 404
+        if repos_from_request:
+            # Use repos and branches from frontend
+            repos_to_scan = repos_from_request
+            current_app.logger.info('Using %d repos with branch info from request', len(repos_to_scan))
+        else:
+            # Get all repositories from GitHub App (fallback)
+            all_repos = get_repositories()
+            
+            if not all_repos or len(all_repos) == 0:
+                return jsonify({'status': 'error', 'message': 'No repositories found'}), 404
+            
+            # Convert to the format expected by scan
+            repos_to_scan = [
+                {
+                    'repo_id': repo.get('id', ''),
+                    'repo_name': repo.get('name', ''),
+                    'repo_owner': repo.get('owner', ''),
+                    'repo_url': repo.get('url', f'https://github.com/{repo.get("owner", "")}/{repo.get("name", "")}.git'),
+                    'repo_branch': repo.get('branch', 'main')
+                }
+                for repo in all_repos
+            ]
         
         triggered_scans = []
         failed_scans = []
         
-        for repo in repos:
+        for repo_info in repos_to_scan:
             try:
-                repo_id = repo.get('id', '')
-                repo_name = repo.get('name', '')
-                repo_owner = repo.get('owner', '')
-                repo_url = repo.get('url', f'https://github.com/{repo_owner}/{repo_name}.git')
-                repo_branch = repo.get('branch', 'main')
+                repo_id = repo_info.get('repo_id', '')
+                repo_name = repo_info.get('repo_name', '')
+                repo_owner = repo_info.get('repo_owner', '')
+                repo_url = repo_info.get('repo_url', f'https://github.com/{repo_owner}/{repo_name}.git')
+                repo_branch = repo_info.get('repo_branch', 'main')
                 
                 if not repo_id or not repo_name or not repo_owner:
-                    failed_scans.append({'repo': f"{repo.get('owner', 'unknown')}/{repo.get('name', 'unknown')}", 'error': 'Missing required fields'})
+                    failed_scans.append({'repo': f"{repo_owner}/{repo_name}", 'error': 'Missing required fields'})
                     continue
                 
-                # Trigger scan for this repo
+                # Trigger scan for this repo with its selected branch
                 result = trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch, scan_types)
                 
                 triggered_scans.append({
                     'repo_id': repo_id,
                     'repo_name': repo_name,
                     'repo_owner': repo_owner,
+                    'repo_branch': repo_branch,
                     'status': result.get('status', 'unknown'),
                     'scan_id': result.get('scan_id', '')
                 })
                 
-                current_app.logger.info('✓ Triggered scan for %s/%s', repo_owner, repo_name)
+                current_app.logger.info('✓ Triggered scan for %s/%s (branch: %s)', repo_owner, repo_name, repo_branch)
                 
             except Exception as scan_err:
-                current_app.logger.error('Failed to scan %s: %s', repo.get('name', 'unknown'), str(scan_err))
-                failed_scans.append({'repo': f"{repo.get('owner', 'unknown')}/{repo.get('name', 'unknown')}", 'error': str(scan_err)})
+                current_app.logger.error('Failed to scan %s: %s', repo_info.get('repo_name', 'unknown'), str(scan_err))
+                failed_scans.append({'repo': f"{repo_info.get('repo_owner', 'unknown')}/{repo_info.get('repo_name', 'unknown')}", 'error': str(scan_err)})
         
         return jsonify({
             'status': 'success',
             'message': f'Triggered {len(triggered_scans)} scans',
-            'total_repos': len(repos),
+            'total_repos': len(repos_to_scan),
             'triggered': triggered_scans,
             'failed': failed_scans
         })

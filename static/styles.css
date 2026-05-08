@@ -529,15 +529,17 @@ html, body {
     border: 1px solid #334155;
     border-radius: 8px;
     flex: 1;
+    width: 100%;
     background: #1e293b;
-    overflow: visible;
+    overflow-x: auto;
+    overflow-y: visible;
     min-height: 0;
 }
 
 .table-header {
     display: flex;
     align-items: center;
-    padding: 8px 12px;
+    padding: 10px 8px;
     background: #0f172a;
     border-bottom: 2px solid #334155;
     font-weight: 600;
@@ -546,18 +548,22 @@ html, body {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     gap: 0;
+    flex-shrink: 0;
+    min-width: 100%;
 }
 
 .table-header > div {
-    padding: 0 4px;
+    padding: 0;
 }
 
 .table-row {
     display: flex;
     align-items: center;
-    padding: 8px 12px;
+    padding: 10px 8px;
     border-bottom: 1px solid #334155;
     transition: background 0.2s ease;
+    gap: 0;
+    min-width: 100%;
 }
 
 .table-row:hover {
@@ -608,6 +614,8 @@ html, body {
 .col-time { width: 130px; min-width: 130px; font-size: 0.8rem; color: #94a3b8; }
 
 .col-repo { flex: 1; min-width: 150px; font-weight: 600; color: #f1f5f9; font-size: 0.9rem; }
+
+.col-branch { width: 100px; min-width: 100px; text-align: center; font-size: 0.85rem; color: #94a3b8; }
 
 .col-total { width: 70px; min-width: 70px; text-align: center; font-weight: 700; color: #f1f5f9; font-size: 0.95rem; }
 
@@ -890,7 +898,37 @@ html, body {
 
 .repos-grid .table-header,
 .repos-grid .table-row {
-    grid-template-columns: 2fr 1.2fr 1.2fr 1fr;
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.repos-grid .table-header > .col-repo-name,
+.repos-grid .table-row > .col-repo-name {
+    flex: 1;
+    min-width: 200px;
+    padding: 0 8px;
+}
+
+.repos-grid .table-header > .col-repo-id,
+.repos-grid .table-row > .col-repo-id {
+    width: 120px;
+    min-width: 120px;
+    padding: 0 8px;
+}
+
+.repos-grid .table-header > .col-repo-branch,
+.repos-grid .table-row > .col-repo-branch {
+    width: 200px;
+    min-width: 200px;
+    padding: 0 8px;
+}
+
+.repos-grid .table-header > .col-repo-action,
+.repos-grid .table-row > .col-repo-action {
+    width: 120px;
+    min-width: 120px;
+    padding: 0 8px;
 }
 
 .history-grid {
@@ -962,6 +1000,8 @@ html, body {
 .col-time { width: 120px; min-width: 120px; font-size: 0.75rem; color: #94a3b8; }
 
 .col-repo { flex: 1; min-width: 150px; font-weight: 600; color: #f1f5f9; font-size: 0.9rem; }
+
+.col-branch { width: 100px; min-width: 100px; text-align: center; font-size: 0.85rem; color: #94a3b8; }
 
 .col-total { width: 70px; min-width: 70px; text-align: center; font-weight: 700; color: #f1f5f9; font-size: 0.95rem; }
 
@@ -1394,10 +1434,35 @@ html, body {
 .col-date, .col-type { text-align: center; }
 .col-status, .col-lang, .col-issues { text-align: center; }
 .col-coverage, .col-duration, .col-scan { text-align: right; }
-.col-repo-name { text-align: left; }
-.col-repo-id { text-align: center; }
-.col-repo-branch { text-align: center; }
-.col-repo-action { text-align: center; }
+.col-repo-name { text-align: left; flex: 1; min-width: 200px; }
+.col-repo-id { text-align: center; width: 120px; min-width: 120px; }
+.col-repo-branch { text-align: center; width: 200px; min-width: 200px; padding: 0 8px; }
+.col-repo-action { text-align: center; width: 120px; min-width: 120px; }
+
+/* ============ Branch Dropdown ============ */
+.branch-select {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background-color: #1e293b;
+    color: #f1f5f9;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+    max-width: 180px;
+}
+
+.branch-select:hover {
+    border-color: #94a3b8;
+    background-color: #334155;
+}
+
+.branch-select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
 
 /* ============ Manual Scan Button ============ */
 .scan-btn {
@@ -1560,8 +1625,9 @@ html, body {
 .history-list {
     flex: 1;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
     max-height: calc(100vh - 180px);
+    width: 100%;
 }
 
 .repos-list::-webkit-scrollbar,

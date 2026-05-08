@@ -43,6 +43,7 @@ def get_scan_history():
                 'scan_id': scan_dir,
                 'timestamp': scan_dir,
                 'repository': 'Unknown',
+                'branch': 'unknown',
                 'status': 'unknown',
                 'total_findings': 0,
                 'severity': {},
@@ -69,6 +70,7 @@ def get_scan_history():
                         repo_owner = merged.get('repo_owner', '')
                         repo_name = merged.get('repo_name', '')
                         scan_data['repository'] = f"{repo_owner}/{repo_name}" if repo_owner and repo_name else (repo_name or 'Unknown')
+                        scan_data['branch'] = merged.get('repo_branch', 'unknown')
                         
                         summary = merged.get('summary', {})
                         scan_data['total_findings'] = summary.get('total_unique', 0)

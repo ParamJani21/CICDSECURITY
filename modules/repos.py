@@ -258,6 +258,56 @@ def get_repository_by_id(repo_id):
     return None
 
 
+def get_repository_branches(owner, repo_name):
+    """
+    Fetch all branches for a specific repository
+    
+    Args:
+        owner: Repository owner (GitHub username or org name)
+        repo_name: Repository name
+    
+    Returns:
+        List of branch names, or empty list if error
+    """
+    try:
+        # Get repositories to find the installation for this repo
+        installations = get_installations()
+        
+        for installation_id in installations:
+            token = get_installation_token(installation_id)
+            if not token:
+                logger.debug(f"Failed to get token for installation {installation_id}")
+                continue
+            
+            headers = {
+                'Authorization': f'token {token}',
+                'Accept': 'application/vnd.github.v3+json'
+            }
+            
+            # Fetch branches for this repo
+            url = f'https://api.github.com/repos/{owner}/{repo_name}/branches'
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                branches = response.json()
+                branch_names = [branch['name'] for branch in branches]
+                logger.debug(f"Found {len(branch_names)} branches for {owner}/{repo_name}: {branch_names}")
+                return branch_names
+            elif response.status_code == 404:
+                logger.debug(f"Repository {owner}/{repo_name} not found in this installation")
+                continue
+            else:
+                logger.warning(f"Error fetching branches for {owner}/{repo_name}: {response.status_code}")
+                continue
+        
+        logger.warning(f"Could not fetch branches for {owner}/{repo_name}")
+        return []
+    
+    except Exception as e:
+        logger.exception(f"Error fetching branches for {owner}/{repo_name}: {e}")
+        return []
+
+
 def get_repository_stats():
     """Get aggregate statistics for all repositories based on scan history"""
     repos = get_repositories()

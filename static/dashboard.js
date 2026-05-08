@@ -8,6 +8,9 @@ const MAX_RETRIES = 5;
 const INITIAL_RETRY_DELAY = 500; // ms
 const INITIAL_LOAD_DELAY = 300; // ms - increased from 100ms to ensure DOM is ready
 
+// Track selected branches per repo (repoId -> branch name)
+const selectedBranches = new Map();
+
 // ============ Tab Management ============
 document.addEventListener('DOMContentLoaded', function() {
     sendClientLog('page_domcontentloaded', { url: window.location.pathname, activeTab: localStorage.getItem('activeTab') || 'overview' });
@@ -324,24 +327,86 @@ function renderReposHtml(repos) {
         let repoUrl = repo.clone_url || repo.html_url || `https://github.com/${repoOwner}/${repo.name}.git`;
         let repoBranch = repo.branch || repo.default_branch || 'main';
         
+        // Initialize selected branch if not set
+        if (!selectedBranches.has(repo.id)) {
+            selectedBranches.set(repo.id, repoBranch);
+        }
+        
         // Escape quotes for JavaScript
         const escapedName = (repo.name || '').replace(/'/g, "\\'");
         const escapedOwner = (repoOwner || '').replace(/'/g, "\\'");
         const escapedUrl = (repoUrl || '').replace(/'/g, "\\'");
-        const escapedBranch = (repoBranch || '').replace(/'/g, "\\'");
         
         html += `
             <div class="table-row">
                 <div class="col-repo-name">${repo.name || 'N/A'}</div>
                 <div class="col-repo-id">${repo.id || 'N/A'}</div>
-                <div class="col-repo-branch">${repoBranch || 'N/A'}</div>
+                <div class="col-repo-branch">
+                    <select id="branch-select-${repo.id}" class="branch-select" onchange="onBranchChange(${repo.id}, this.value)">
+                        <option value="${repoBranch}">${repoBranch}</option>
+                        <option value="loading" disabled>Loading branches...</option>
+                    </select>
+                </div>
                 <div class="col-repo-action">
-                    <button class="scan-btn" onclick="triggerManualScan('${repo.id}', '${escapedName}', '${escapedOwner}', '${escapedUrl}', '${escapedBranch}')">Scan</button>
+                    <button class="scan-btn" onclick="triggerManualScan('${repo.id}', '${escapedName}', '${escapedOwner}', '${escapedUrl}')">Scan</button>
                 </div>
             </div>
         `;
     });
+    
+    // After rendering, fetch branches for each repo
+    setTimeout(() => {
+        repos.forEach(repo => {
+            fetchAndPopulateBranches(repo);
+        });
+    }, 100);
+    
     return html;
+}
+
+// Fetch available branches for a repo and populate dropdown
+function fetchAndPopulateBranches(repo) {
+    const selectElement = document.getElementById(`branch-select-${repo.id}`);
+    if (!selectElement) return;
+    
+    const owner = repo.owner || 'unknown';
+    const repoName = repo.name || '';
+    
+    fetch(`/api/branches/${owner}/${repoName}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.branches && data.branches.length > 0) {
+                // Clear existing options except the first one (default branch)
+                const currentValue = selectElement.value;
+                selectElement.innerHTML = '';
+                
+                // Add all branches as options
+                data.branches.forEach(branch => {
+                    const option = document.createElement('option');
+                    option.value = branch;
+                    option.textContent = branch;
+                    option.selected = (branch === currentValue);
+                    selectElement.appendChild(option);
+                });
+                
+                // Store the current selected branch
+                if (!selectedBranches.has(repo.id)) {
+                    selectedBranches.set(repo.id, data.branches[0]);
+                }
+            } else {
+                // If no branches found or error, keep current selection
+                console.warn(`Could not fetch branches for ${owner}/${repoName}`);
+            }
+        })
+        .catch(error => {
+            console.error(`Error fetching branches for ${owner}/${repoName}:`, error);
+        });
+}
+
+// Handle branch dropdown change
+function onBranchChange(repoId, selectedBranch) {
+    selectedBranches.set(repoId, selectedBranch);
+    console.log(`Branch selected for repo ${repoId}: ${selectedBranch}`);
 }
 
 // Simple non-blocking toast notification helper (replaces alert)
@@ -468,40 +533,67 @@ function startSingleRepoScan(repo, scanTypes) {
 function startScanAllRepos(scanTypes) {
     showToast(`Starting scan for all repositories... (${scanTypes.join(', ')})`, 'info');
     
-    fetch('/api/repos/scan-all', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ scan_types: scanTypes })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            showToast(`✓ Started scanning ${data.total_repos} repositories`, 'success');
-            loadHistory();
-            updateScanStatus();
-        } else {
-            showToast(`✗ Error: ${data.message}`, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error scanning all repos:', error);
-        showToast(`✗ Error: ${error.message}`, 'error');
-    });
+    // Fetch current repos to get their selected branches
+    fetch('/api/repos')
+        .then(response => response.json())
+        .then(data => {
+            const repos = data.repositories || [];
+            
+            // Build array of repos with their selected branches
+            const reposWithBranches = repos.map(repo => ({
+                repo_id: repo.id,
+                repo_name: repo.name,
+                repo_owner: repo.owner,
+                repo_url: repo.clone_url || repo.html_url || `https://github.com/${repo.owner}/${repo.name}.git`,
+                repo_branch: selectedBranches.get(repo.id) || repo.branch || 'main'
+            }));
+            
+            // Send scan request with branch info for each repo
+            fetch('/api/repos/scan-all', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    scan_types: scanTypes,
+                    repos: reposWithBranches
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast(`✓ Started scanning ${data.total_repos} repositories`, 'success');
+                    loadHistory();
+                    updateScanStatus();
+                } else {
+                    showToast(`✗ Error: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error scanning all repos:', error);
+                showToast(`✗ Error: ${error.message}`, 'error');
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching repos:', error);
+            showToast(`✗ Error fetching repositories: ${error.message}`, 'error');
+        });
 }
 
 function scanAllRepos() {
     openScanModal([], true);
 }
 
-function triggerManualScan(repoId, repoName, repoOwner, repoUrl, repoBranch) {
+function triggerManualScan(repoId, repoName, repoOwner, repoUrl) {
+    // Get the selected branch from the dropdown
+    const selectedBranch = selectedBranches.get(parseInt(repoId)) || 'main';
+    
     const repo = {
         id: repoId,
         name: repoName,
         owner: repoOwner,
         url: repoUrl,
-        branch: repoBranch || 'main'
+        branch: selectedBranch
     };
     openScanModal([repo], false);
 }
@@ -524,6 +616,7 @@ function loadHistory() {
                     const severity = scan.severity || {};
                     const category = scan.category || {};
                     const multiSource = scan.multi_source || 0;
+                    const branch = scan.branch || 'unknown';
                     
                     const critical = severity.CRITICAL || 0;
                     const high = severity.HIGH || 0;
@@ -539,6 +632,7 @@ function loadHistory() {
                                 </div>
                                 <div class="col-time">${formatDate(scan.timestamp)}</div>
                                 <div class="col-repo">${scan.repository || 'Unknown'}</div>
+                                <div class="col-branch">${branch}</div>
                                 <div class="col-total">${total}</div>
                                 <div class="col-severity">
                                     <span class="severity-badge critical">${critical}</span>
@@ -556,10 +650,11 @@ function loadHistory() {
                                     <div class="details-header">
                                         <h4>Scan: ${scan.scan_id}</h4>
                                         <span class="repo-name">${scan.repository || 'Unknown'}</span>
+                                        <span class="scan-branch" style="margin-left: 1rem;">Branch: <strong>${branch}</strong></span>
                                     </div>
                                     <div class="details-grid">
                                         <div class="detail-card">
-                                            <h5>Severity</h5>
+                                             <h5>Severity</h5>
                                             <div class="detail-stat"><span class="stat-label">CRITICAL:</span><span class="stat-value critical">${critical}</span></div>
                                             <div class="detail-stat"><span class="stat-label">HIGH:</span><span class="stat-value high">${high}</span></div>
                                             <div class="detail-stat"><span class="stat-label">MEDIUM:</span><span class="stat-value medium">${medium}</span></div>
@@ -810,6 +905,7 @@ function loadHistoryWithRestore(checkedIds) {
                     const severity = scan.severity || {};
                     const category = scan.category || {};
                     const multiSource = scan.multi_source || 0;
+                    const branch = scan.branch || 'unknown';
                     
                     const critical = severity.CRITICAL || 0;
                     const high = severity.HIGH || 0;
@@ -825,6 +921,7 @@ function loadHistoryWithRestore(checkedIds) {
                                 </div>
                                 <div class="col-time">${formatDate(scan.timestamp)}</div>
                                 <div class="col-repo">${scan.repository || 'Unknown'}</div>
+                                <div class="col-branch">${branch}</div>
                                 <div class="col-total">${total}</div>
                                 <div class="col-severity">
                                     <span class="severity-badge critical">${critical}</span>
@@ -842,6 +939,7 @@ function loadHistoryWithRestore(checkedIds) {
                                     <div class="details-header">
                                         <h4>Scan: ${scan.scan_id}</h4>
                                         <span class="repo-name">${scan.repository || 'Unknown'}</span>
+                                        <span class="scan-branch" style="margin-left: 1rem;">Branch: <strong>${branch}</strong></span>
                                     </div>
                                     <div class="details-grid">
                                         <div class="detail-card">

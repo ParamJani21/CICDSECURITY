@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CICDSECURITY Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=20260508_v3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=20260508_v5">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles-base.css') }}?v=20260508">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles-components.css') }}?v=20260508">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles-responsive.css') }}?v=20260508">>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles-responsive.css') }}?v=20260508">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 </head>
 <body>
@@ -119,6 +119,7 @@
                             </div>
                             <div class="col-time">Timestamp</div>
                             <div class="col-repo">Repository</div>
+                            <div class="col-branch">Branch</div>
                             <div class="col-total">Total</div>
                             <div class="col-severity">Severity</div>
                             <div class="col-multi">Multi</div>
@@ -239,6 +240,6 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='dashboard.js') }}?v=20260508_v3"></script>
+    <script src="{{ url_for('static', filename='dashboard.js') }}?v=20260508_v5"></script>
 </body>
 </html>
