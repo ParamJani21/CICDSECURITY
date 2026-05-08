@@ -1571,18 +1571,29 @@ function closeExportModal() {
     document.getElementById('export-modal').classList.remove('active');
 }
 function confirmExport() {
+    const params = new URLSearchParams();
+    
+    // Date filter (000 to 111 - bit 0)
+    const dateFrom = document.getElementById('export-date-from').value;
+    const dateTo = document.getElementById('export-date-to').value;
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    
+    // Severity filter (bit 1)
     const severity = [];
     if (document.getElementById('export-critical').checked) severity.push('CRITICAL');
     if (document.getElementById('export-high').checked) severity.push('HIGH');
     if (document.getElementById('export-medium').checked) severity.push('MEDIUM');
     if (document.getElementById('export-low').checked) severity.push('LOW');
+    if (severity.length) params.set('severity', severity.join(','));
+    
+    // Tool filter (bit 2)
     const tool = [];
     if (document.getElementById('export-opengrep').checked) tool.push('opengrep');
     if (document.getElementById('export-truffle').checked) tool.push('truffle');
     if (document.getElementById('export-trivy').checked) tool.push('trivy');
-    const params = new URLSearchParams();
-    if (severity.length) params.set('severity', severity.join(','));
     if (tool.length) params.set('tool', tool.join(','));
+    
     closeExportModal();
     window.location.href = '/api/export-report' + (params.toString() ? '?' + params.toString() : '');
 }

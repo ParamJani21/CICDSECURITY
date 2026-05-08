@@ -460,7 +460,9 @@ def api_export_report():
     from flask import make_response
     
     try:
-        # Get filter params
+        # Get filter params (000 to 111 - date, severity, tool)
+        date_from = request.args.get('date_from', '')
+        date_to = request.args.get('date_to', '')
         severity_filter = request.args.get('severity', '').split(',') if request.args.get('severity') else []
         tool_filter = request.args.get('tool', '').split(',') if request.args.get('tool') else []
         
@@ -523,6 +525,29 @@ def api_export_report():
                             scans.append(scan_data)
                     except Exception:
                         continue
+        
+        # Apply date filter (bit 0)
+        if date_from or date_to:
+            filtered_scans = []
+            for scan in scans:
+                ts = scan.get('timestamp', '')
+                if not ts:
+                    continue
+                # Parse timestamp - could be ISO format or directory name
+                try:
+                    if 'T' in ts:
+                        scan_date = ts.split('T')[0]
+                    else:
+                        scan_date = ts[:10] if len(ts) >= 10 else ''
+                except:
+                    scan_date = ''
+                
+                if date_from and scan_date < date_from:
+                    continue
+                if date_to and scan_date > date_to:
+                    continue
+                filtered_scans.append(scan)
+            scans = filtered_scans
         
         # Apply severity filter
         if severity_filter:
