@@ -46,6 +46,16 @@ class User(db.Model):
     # Role
     role = db.Column(db.String(50), default='admin')  # admin, viewer, operator
     
+    # GitHub Credentials (Encrypted)
+    encrypted_github_app_id = db.Column(db.Text)  # Encrypted GitHub App ID
+    encrypted_github_key = db.Column(db.Text)  # Encrypted GitHub Private Key
+    github_credentials_updated_at = db.Column(db.DateTime)  # When credentials were last updated
+    
+    # User Metadata (for User Management)
+    full_name = db.Column(db.String(255))  # User's full name
+    department = db.Column(db.String(255))  # Department/team
+    is_active = db.Column(db.Boolean, default=True)  # Can be disabled by admin
+    
     # Relationships
     preferences = db.relationship('UserPreferences', uselist=False, backref='user', 
                                  cascade='all, delete-orphan')

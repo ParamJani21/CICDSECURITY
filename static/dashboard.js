@@ -1274,3 +1274,291 @@ function logout() {
         alert('Logout error: ' + error.message);
     });
 }
+
+// ============ FINDINGS FILTER FUNCTIONS ============
+
+function applyFilters() {
+    const severityFilters = Array.from(document.querySelectorAll('.severity-filter:checked')).map(cb => cb.value);
+    const toolFilters = Array.from(document.querySelectorAll('.tool-filter:checked')).map(cb => cb.value);
+    const categoryFilters = Array.from(document.querySelectorAll('.category-filter:checked')).map(cb => cb.value);
+    const searchQuery = document.getElementById('findingsSearch')?.value || '';
+    
+    const params = new URLSearchParams();
+    if (severityFilters.length) params.set('severity', severityFilters.join(','));
+    if (toolFilters.length) params.set('tool', toolFilters.join(','));
+    if (categoryFilters.length) params.set('category', categoryFilters.join(','));
+    if (searchQuery) params.set('search', searchQuery);
+    
+    const historyList = document.getElementById('history-list');
+    if (historyList) historyList.innerHTML = '<div style="padding: 2rem; text-align: center; color: #64748b;">Filtering...</div>';
+    
+    // If no filters, just reload all history
+    if (!severityFilters.length && !toolFilters.length && !categoryFilters.length && !searchQuery) {
+        loadHistory();
+        return;
+    }
+    
+    fetch('/api/history/filter?' + params.toString())
+        .then(response => response.json())
+        .then(data => {
+            if (data.history && data.history.length > 0) {
+                renderFilteredHistory(data.history);
+            } else {
+                historyList.innerHTML = '<div style="padding: 2rem; text-align: center; color: #64748b;">No findings match your filters</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Filter error:', error);
+            loadHistory();
+        });
+}
+
+function clearFilters() {
+    document.querySelectorAll('.severity-filter, .tool-filter, .category-filter').forEach(cb => cb.checked = false);
+    if (document.getElementById('findingsSearch')) {
+        document.getElementById('findingsSearch').value = '';
+    }
+    loadHistory();
+}
+
+function renderFilteredHistory(filteredHistory) {
+    const historyList = document.getElementById('history-list');
+    if (!historyList) return;
+    
+    if (!filteredHistory || filteredHistory.length === 0) {
+        historyList.innerHTML = '<div class="empty-state">No findings match your filters</div>';
+        return;
+    }
+    
+    // Save current checkbox state
+    const checkedIds = Array.from(document.querySelectorAll('.scan-checkbox:checked')).map(cb => cb.getAttribute('data-scan-id'));
+    
+    let html = '';
+    filteredHistory.forEach(scan => {
+        html += renderHistoryItem(scan);
+    });
+    historyList.innerHTML = html;
+    
+    // Restore checkbox state
+    checkedIds.forEach(id => {
+        const cb = document.querySelector(`.scan-checkbox[data-scan-id="${id}"]`);
+        if (cb) cb.checked = true;
+    });
+    updateDeleteButton();
+}
+
+function renderHistoryItem(scan) {
+    // Get severity counts from findings
+    const findings = scan.findings || [];
+    const severity = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+    const sources = new Set();
+    let multiSource = 0;
+    
+    findings.forEach(f => {
+        const sev = f.severity || 'LOW';
+        if (severity[sev] !== undefined) severity[sev]++;
+        (f.sources || []).forEach(s => sources.add(s));
+    });
+    
+    const total = findings.length;
+    const branch = scan.repo_branch || 'main';
+    const critical = severity.CRITICAL;
+    const high = severity.HIGH;
+    const medium = severity.MEDIUM;
+    const low = severity.LOW;
+    
+    let html = '';
+    html += `
+            <div class="history-row" onclick="toggleScanDetails('${scan.scan_id}')">
+                <div class="col-checkbox">
+                    <input type="checkbox" class="scan-checkbox" data-scan-id="${scan.scan_id}" onclick="event.stopPropagation(); updateDeleteButton(); saveCheckboxState()">
+                </div>
+                <div class="col-time">${formatDate(scan.timestamp)}</div>
+                <div class="col-repo">${scan.repository || 'Unknown'}</div>
+                <div class="col-branch">${branch}</div>
+                <div class="col-total">${total}</div>
+                <div class="col-severity">
+                    <span class="severity-badge critical">${critical}</span>
+                    <span class="severity-badge high">${high}</span>
+                    <span class="severity-badge medium">${medium}</span>
+                    <span class="severity-badge low">${low}</span>
+                </div>
+                <div class="col-multi">${multiSource > 0 ? multiSource : '-'}</div>
+            </div>
+            <div class="scan-details" id="details-${scan.scan_id}" style="display: none;">
+                <div class="details-content">
+                    <div class="details-header">
+                        <h4>Scan: ${scan.scan_id}</h4>
+                        <span class="repo-name">${scan.repository || 'Unknown'}</span>
+                        <span class="scan-branch" style="margin-left: 1rem;">Branch: <strong>${branch}</strong></span>
+                    </div>
+                    <div class="findings-list" id="findings-${scan.scan_id}">
+                        <h5>All Findings from merged.json (${total})</h5>
+                        <div class="findings-loading" style="display: none;">Loading findings...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    return html;
+}
+
+// ============ USER MANAGEMENT FUNCTIONS ============
+
+function loadUsers() {
+    fetch('/api/users', { credentials: 'include' })
+    .then(response => {
+        if (response.status === 403) {
+            alert('Access denied. Admin only.');
+            return;
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data && data.users) {
+            displayUsers(data.users);
+        }
+    })
+    .catch(error => {
+        console.error('Error loading users:', error);
+    });
+}
+
+function displayUsers(users) {
+    const tbody = document.getElementById('users-list');
+    if (!tbody) return;
+    
+    if (!users || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px; color: #64748b;">No users found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = users.map(user => `
+        <tr>
+            <td>${user.username}</td>
+            <td>${user.email || '-'}</td>
+            <td>${user.full_name || '-'}</td>
+            <td>${user.department || '-'}</td>
+            <td><span class="user-role-badge ${user.role}">${user.role}</span></td>
+            <td><span class="user-status-badge ${user.is_active ? 'active' : 'disabled'}">${user.is_active ? 'Active' : 'Disabled'}</span></td>
+            <td>${user.created_at ? user.created_at.split('T')[0] : '-'}</td>
+            <td>${user.last_login ? user.last_login.split('T')[0] : 'Never'}</td>
+            <td class="user-actions">
+                <button class="edit-btn" onclick="editUser(${user.id})">Edit</button>
+                <button class="disable-btn" onclick="deleteUser(${user.id})">${user.is_active ? 'Disable' : 'Enable'}</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function showCreateUserModal() {
+    document.getElementById('user-modal-title').textContent = 'Create User';
+    document.getElementById('user-id').value = '';
+    document.getElementById('user-form').reset();
+    document.getElementById('password-group').style.display = 'block';
+    document.getElementById('is-active-group').style.display = 'none';
+    document.getElementById('user-modal').style.display = 'block';
+}
+
+function closeUserModal() {
+    document.getElementById('user-modal').style.display = 'none';
+}
+
+function editUser(userId) {
+    fetch('/api/users', { credentials: 'include' })
+    .then(response => response.json())
+    .then(data => {
+        const user = data.users.find(u => u.id === userId);
+        if (!user) {
+            alert('User not found');
+            return;
+        }
+        
+        document.getElementById('user-modal-title').textContent = 'Edit User';
+        document.getElementById('user-id').value = user.id;
+        document.getElementById('user-username').value = user.username;
+        document.getElementById('user-email').value = user.email || '';
+        document.getElementById('user-fullname').value = user.full_name || '';
+        document.getElementById('user-department').value = user.department || '';
+        document.getElementById('user-role').value = user.role;
+        document.getElementById('user-is-active').checked = user.is_active;
+        
+        document.getElementById('password-group').style.display = 'none';
+        document.getElementById('is-active-group').style.display = 'block';
+        document.getElementById('user-modal').style.display = 'block';
+    });
+}
+
+function deleteUser(userId) {
+    if (!confirm('Are you sure you want to disable this user?')) return;
+    
+    fetch('/api/users/' + userId, {
+        method: 'DELETE',
+        credentials: 'include'
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message || data.status);
+        loadUsers();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to disable user');
+    });
+}
+
+document.getElementById('user-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const userId = document.getElementById('user-id').value;
+    const isEdit = !!userId;
+    
+    const userData = {
+        username: document.getElementById('user-username').value,
+        email: document.getElementById('user-email').value,
+        full_name: document.getElementById('user-fullname').value,
+        department: document.getElementById('user-department').value,
+        role: document.getElementById('user-role').value
+    };
+    
+    if (!isEdit) {
+        userData.password = document.getElementById('user-password').value;
+    } else {
+        userData.is_active = document.getElementById('user-is-active').checked;
+    }
+    
+    const url = isEdit ? '/api/users/' + userId : '/api/users';
+    const method = isEdit ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(userData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            alert(data.message);
+            closeUserModal();
+            loadUsers();
+        } else {
+            alert(data.message || 'Error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to save user');
+    });
+});
+
+// Load users when users tab is shown
+document.querySelector('[data-tab="users"]').addEventListener('click', function() {
+    loadUsers();
+});
+
+// ============ FILTER PANEL TOGGLE ============
+function toggleFilterPanel() {
+    const panel = document.getElementById('filter-panel');
+    panel.classList.toggle('active');
+}

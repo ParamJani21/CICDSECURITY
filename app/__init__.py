@@ -46,6 +46,37 @@ def create_app():
     with app.app_context():
         try:
             db.create_all()
+            
+            # Add missing columns to existing tables (for database migrations)
+            from sqlalchemy import text
+            try:
+                # Check if columns exist, if not add them
+                result = db.session.execute(text("PRAGMA table_info(users)"))
+                columns = [row[1] for row in result.fetchall()]
+                
+                if 'encrypted_github_app_id' not in columns:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN encrypted_github_app_id TEXT"))
+                    app.logger.info('Added column: encrypted_github_app_id')
+                if 'encrypted_github_key' not in columns:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN encrypted_github_key TEXT"))
+                    app.logger.info('Added column: encrypted_github_key')
+                if 'github_credentials_updated_at' not in columns:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN github_credentials_updated_at TIMESTAMP"))
+                    app.logger.info('Added column: github_credentials_updated_at')
+                if 'full_name' not in columns:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR(255)"))
+                    app.logger.info('Added column: full_name')
+                if 'department' not in columns:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN department VARCHAR(255)"))
+                    app.logger.info('Added column: department')
+                if 'is_active' not in columns:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT 1"))
+                    app.logger.info('Added column: is_active')
+                
+                db.session.commit()
+            except Exception as col_e:
+                app.logger.warning(f'Column migration note: {col_e}')
+            
             app.logger.info('Database initialized successfully')
         except Exception as e:
             app.logger.error(f'Failed to initialize database: {e}')

@@ -10,22 +10,66 @@ import requests
 import json
 import logging
 from modules.env_config import env_config
+from modules.settings import get_github_credentials_for_user
+from models.database import User
+from flask import current_app
 
 logger = logging.getLogger(__name__)
+
+
+def get_github_credentials():
+    """
+    Get GitHub credentials - tries database (encrypted) first, falls back to .env
+    
+    Returns:
+        tuple: (app_id, secret_key)
+    """
+    # Try to get from database first (encrypted storage)
+    try:
+        # Get the first admin user with stored credentials
+        admin_user = User.query.filter(
+            User.encrypted_github_app_id.isnot(None),
+            User.encrypted_github_key.isnot(None)
+        ).first()
+        
+        if admin_user:
+            creds = get_github_credentials_for_user(admin_user.id)
+            if creds and creds.get('github_app_id'):
+                app_id = creds['github_app_id']
+                secret_key = decrypt_github_key(admin_user.id)
+                if app_id and secret_key:
+                    current_app.logger.info('Using encrypted credentials from database')
+                    return app_id, secret_key
+    except Exception as e:
+        current_app.logger.warning(f'Database credentials not available: {e}')
+    
+    # Fallback to .env
+    app_id = env_config.get_setting('GITHUB_APP_ID')
+    secret_key = env_config.get_setting('GITHUB_SECRET_KEY')
+    return app_id, secret_key
+
+
+def decrypt_github_key(user_id):
+    """Decrypt GitHub private key for a user"""
+    from utils.crypto_utils import decrypt_credential
+    user = User.query.get(user_id)
+    if user and user.encrypted_github_key:
+        return decrypt_credential(user.encrypted_github_key)
+    return None
 
 
 def get_github_app_token():
     """
     Generate a JWT token for GitHub App authentication
-    RSA private key is automatically converted from escaped newlines (\n) to actual newlines by env_config
+    Uses encrypted database credentials first, falls back to .env
     
     Returns:
         JWT token for GitHub App API calls
     """
     try:
         logger.debug("Starting get_github_app_token...")
-        app_id = env_config.get_setting('GITHUB_APP_ID')
-        secret_key = env_config.get_setting('GITHUB_SECRET_KEY')
+        # Use new function that tries database first, then .env
+        app_id, secret_key = get_github_credentials()
         
         logger.debug(f"App ID: {app_id}")
         logger.debug(f"Secret Key present: {bool(secret_key)}")

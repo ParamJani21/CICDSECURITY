@@ -79,6 +79,9 @@ def get_scan_history():
                         scan_data['multi_source'] = summary.get('multi_source_findings', 0)
                         scan_data['tool_breakdown'] = summary.get('tool_breakdown', {})
                         
+                        # Add findings array for filtering
+                        scan_data['findings'] = merged.get('findings', [])
+                        
                         # Get first finding for preview
                         findings = merged.get('findings', [])
                         if findings:

@@ -31,6 +31,9 @@
                     <button class="tab-button" data-tab="settings">
                         <span class="tab-icon">⚙️</span> Settings
                     </button>
+                    <button class="tab-button" data-tab="users">
+                        <span class="tab-icon">👥</span> Users
+                    </button>
                 </nav>
                 <!-- User Menu -->
                 <div class="user-menu">
@@ -118,6 +121,9 @@
                     <div class="history-header">
                         <h2>Scan History</h2>
                         <div class="history-stats">
+                            <button class="filter-toggle-btn" onclick="toggleFilterPanel()">
+                                🔍 FILTER
+                            </button>
                             <button class="export-report-btn" onclick="exportReport()">
                                 📥 EXPORT REPORT
                             </button>
@@ -129,6 +135,71 @@
                             </button>
                         </div>
                     </div>
+                    
+                    <!-- Filter Slide Panel -->
+                    <div class="filter-panel" id="filter-panel">
+                        <div class="filter-panel-header">
+                            <h3>Filter Findings</h3>
+                            <button class="filter-panel-close" onclick="toggleFilterPanel()">&times;</button>
+                        </div>
+                        <div class="filter-panel-body">
+                            <div class="filter-section">
+                                <label>Search</label>
+                                <input type="text" id="findingsSearch" class="filter-input" placeholder="Search filename, title, message...">
+                            </div>
+                            <div class="filter-section">
+                                <label>Severity</label>
+                                <div class="filter-checkboxes">
+                                    <label class="filter-checkbox">
+                                        <input type="checkbox" class="severity-filter" value="CRITICAL"> 
+                                        <span class="severity-badge critical">CRITICAL</span>
+                                    </label>
+                                    <label class="filter-checkbox">
+                                        <input type="checkbox" class="severity-filter" value="HIGH"> 
+                                        <span class="severity-badge high">HIGH</span>
+                                    </label>
+                                    <label class="filter-checkbox">
+                                        <input type="checkbox" class="severity-filter" value="MEDIUM"> 
+                                        <span class="severity-badge medium">MEDIUM</span>
+                                    </label>
+                                    <label class="filter-checkbox">
+                                        <input type="checkbox" class="severity-filter" value="LOW"> 
+                                        <span class="severity-badge low">LOW</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="filter-section">
+                                <label>Tool</label>
+                                <div class="filter-checkboxes">
+                                    <label class="filter-checkbox">
+                                        <input type="checkbox" class="tool-filter" value="opengrep"> OpenGrep
+                                    </label>
+                                    <label class="filter-checkbox">
+                                        <input type="checkbox" class="tool-filter" value="truffle"> TruffleHog
+                                    </label>
+                                    <label class="filter-checkbox">
+                                        <input type="checkbox" class="tool-filter" value="trivy"> Trivy
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="filter-section">
+                                <label>Category</label>
+                                <div class="filter-checkboxes">
+                                    <label class="filter-checkbox">
+                                        <input type="checkbox" class="category-filter" value="secrets"> Secrets
+                                    </label>
+                                    <label class="filter-checkbox">
+                                        <input type="checkbox" class="category-filter" value="code"> Code
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="filter-panel-footer">
+                            <button class="btn-secondary" onclick="clearFilters()">Clear All</button>
+                            <button class="btn-primary" onclick="applyFilters(); toggleFilterPanel();">Apply Filters</button>
+                        </div>
+                    </div>
+                    
                     <div class="history-grid">
                         <div class="table-header">
                             <div class="col-checkbox">
@@ -216,6 +287,88 @@
                                 </div>
                             </form>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Users Tab (Admin Only) -->
+            <div class="tab-content" id="users-tab">
+                <div class="users-container">
+                    <div class="users-header">
+                        <h2>User Management</h2>
+                        <button class="btn-primary" onclick="showCreateUserModal()">+ Create User</button>
+                    </div>
+                    <div class="users-table-container">
+                        <table class="users-table" id="users-table">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Email</th>
+                                    <th>Full Name</th>
+                                    <th>Department</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Last Login</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-list">
+                                <!-- Users will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Create/Edit User Modal -->
+            <div id="user-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 id="user-modal-title">Create User</h3>
+                        <button class="modal-close" onclick="closeUserModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="user-form">
+                            <input type="hidden" id="user-id">
+                            <div class="form-group">
+                                <label for="user-username">Username</label>
+                                <input type="text" id="user-username" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="user-email">Email</label>
+                                <input type="email" id="user-email">
+                            </div>
+                            <div class="form-group" id="password-group">
+                                <label for="user-password">Password</label>
+                                <input type="password" id="user-password">
+                            </div>
+                            <div class="form-group">
+                                <label for="user-fullname">Full Name</label>
+                                <input type="text" id="user-fullname">
+                            </div>
+                            <div class="form-group">
+                                <label for="user-department">Department</label>
+                                <input type="text" id="user-department">
+                            </div>
+                            <div class="form-group">
+                                <label for="user-role">Role</label>
+                                <select id="user-role">
+                                    <option value="viewer">Viewer</option>
+                                    <option value="operator">Operator</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="is-active-group" style="display: none;">
+                                <label>
+                                    <input type="checkbox" id="user-is-active"> Active
+                                </label>
+                            </div>
+                            <div class="modal-actions">
+                                <button type="button" class="btn-secondary" onclick="closeUserModal()">Cancel</button>
+                                <button type="submit" class="btn-primary">Save</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>

@@ -9,9 +9,11 @@ from modules.overview import get_overview_data
 from modules.repos import get_repositories, get_repository_stats, get_repository_branches
 from modules.history import get_scan_history, get_history_stats, get_scan_details
 from modules.settings import (get_settings, get_integration_status, 
-                             get_github_credentials, save_github_credentials)
+                             get_github_credentials, save_github_credentials, 
+                             get_github_credentials_for_user)
 from modules.scan_controller import trigger_scan
-from auth.decorators import require_login
+from auth.decorators import require_login, require_admin
+from auth.utils import get_current_user
 
 bp = Blueprint('main', __name__)
 
@@ -107,6 +109,51 @@ def api_scan_details(scan_id):
             return response
         return jsonify(details), 200
     return jsonify({'error': 'Scan not found', 'status': 'not_found'}), 404
+
+
+@bp.route('/api/history/filter')
+@require_login
+def api_history_filter():
+    """API endpoint for filtering scan history findings by severity, tool, category, and search"""
+    severity = request.args.get('severity', '')
+    tool = request.args.get('tool', '')
+    category = request.args.get('category', '')
+    search = request.args.get('search', '')
+    
+    # Parse comma-separated values into lists
+    severity_list = [s.strip().upper() for s in severity.split(',') if s.strip()]
+    tool_list = [t.strip().lower() for t in tool.split(',') if t.strip()]
+    category_list = [c.strip().lower() for c in category.split(',') if c.strip()]
+    
+    # If no filters, return all history
+    if not severity_list and not tool_list and not category_list and not search:
+        history = get_scan_history()
+        return jsonify({'history': history})
+    
+    # Get history and filter
+    history = get_scan_history()
+    filtered = []
+    
+    for scan in history:
+        # Filter findings in each scan
+        findings = scan.get('findings', [])
+        if not findings:
+            findings = []
+        
+        filtered_findings = [
+            f for f in findings
+            if (not severity_list or f.get('severity', '').upper() in severity_list)
+            and (not tool_list or any(t in f.get('sources', []).lower() if f.get('sources') else [] for t in tool_list))
+            and (not category_list or f.get('category', '').lower() in category_list)
+            and (not search or search.lower() in (f.get('file', '') or '').lower() or search.lower() in (f.get('message', '') or '').lower() or search.lower() in (f.get('title', '') or '').lower())
+        ]
+        
+        if filtered_findings:  # Only return scans with matching findings
+            scan_copy = scan.copy()
+            scan_copy['findings'] = filtered_findings
+            filtered.append(scan_copy)
+    
+    return jsonify({'history': filtered})
 
 
 @bp.route('/api/history/delete', methods=['POST'])
@@ -306,9 +353,22 @@ def api_settings():
 @bp.route('/api/settings/github', methods=['GET'])
 @require_login
 def api_get_github_credentials():
-    """API endpoint to retrieve GitHub credentials"""
+    """API endpoint to retrieve GitHub credentials (decrypted for authenticated user)"""
     try:
-        credentials = get_github_credentials()
+        user = get_current_user()
+        if not user:
+            return jsonify({
+                'status': 'error',
+                'message': 'User not authenticated'
+            }), 401
+        
+        # Try database first (encrypted credentials)
+        credentials = get_github_credentials_for_user(user.id)
+        
+        # Fallback to .env if not in database
+        if not credentials or not credentials.get('github_app_id'):
+            credentials = get_github_credentials()
+        
         return jsonify({
             'status': 'success',
             'credentials': credentials
@@ -323,8 +383,15 @@ def api_get_github_credentials():
 @bp.route('/api/settings/github', methods=['POST'])
 @require_login
 def api_save_github_credentials():
-    """API endpoint to save GitHub credentials"""
+    """API endpoint to save GitHub credentials (encrypted in database)"""
     try:
+        user = get_current_user()
+        if not user:
+            return jsonify({
+                'status': 'error',
+                'message': 'User not authenticated'
+            }), 401
+        
         data = request.get_json()
         
         if not data:
@@ -337,7 +404,8 @@ def api_save_github_credentials():
             github_app_id=data.get('github_app_id', ''),
             github_app_name=data.get('github_app_name', ''),
             github_secret_key=data.get('github_secret_key', ''),
-            ngrok_oauth_token=data.get('ngrok_oauth_token', '')
+            ngrok_oauth_token=data.get('ngrok_oauth_token', ''),
+            user_id=user.id  # Pass current user ID for encryption
         )
         
         return jsonify(result)
@@ -845,3 +913,187 @@ def api_export_report():
     except Exception as e:
         current_app.logger.exception('Error generating report: %s', e)
         return jsonify({'error': str(e)}), 500
+
+
+# ============ USER MANAGEMENT ENDPOINTS ============
+
+@bp.route('/api/users', methods=['GET'])
+@require_login
+@require_admin
+def api_get_users():
+    """Get all users (admin only)"""
+    from models.database import User
+    
+    users = User.query.order_by(User.created_at.desc()).all()
+    
+    return jsonify({
+        'status': 'success',
+        'users': [{
+            'id': u.id,
+            'username': u.username,
+            'email': u.email,
+            'role': u.role,
+            'full_name': u.full_name,
+            'department': u.department,
+            'is_active': u.is_active,
+            'created_at': u.created_at.isoformat() if u.created_at else None,
+            'last_login': u.last_login.isoformat() if u.last_login else None
+        } for u in users]
+    })
+
+
+@bp.route('/api/users', methods=['POST'])
+@require_login
+@require_admin
+def api_create_user():
+    """Create a new user (admin only)"""
+    from models.database import User
+    from validators.input_validators import validate_username, validate_email, validate_password_strength
+    
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+    
+    username = data.get('username', '').strip()
+    email = data.get('email', '').strip()
+    password = data.get('password', '')
+    role = data.get('role', 'viewer')
+    full_name = data.get('full_name', '').strip()
+    department = data.get('department', '').strip()
+    
+    # Validation
+    if not username:
+        return jsonify({'status': 'error', 'message': 'Username is required'}), 400
+    
+    valid, msg = validate_username(username)
+    if not valid:
+        return jsonify({'status': 'error', 'message': msg}), 400
+    
+    if not password:
+        return jsonify({'status': 'error', 'message': 'Password is required'}), 400
+    
+    valid, msg = validate_password_strength(password, username)
+    if not valid:
+        return jsonify({'status': 'error', 'message': msg}), 400
+    
+    # Check if username exists
+    if User.query.filter_by(username=username).first():
+        return jsonify({'status': 'error', 'message': 'Username already exists'}), 400
+    
+    # Check if email exists
+    if email and User.query.filter_by(email=email).first():
+        return jsonify({'status': 'error', 'message': 'Email already exists'}), 400
+    
+    # Validate role
+    if role not in ['admin', 'viewer', 'operator']:
+        role = 'viewer'
+    
+    try:
+        # Create user
+        new_user = User(
+            username=username,
+            email=email if email else None,
+            password_hash=User.hash_password(password),
+            role=role,
+            full_name=full_name if full_name else None,
+            department=department if department else None,
+            is_first_login=True,
+            is_active=True
+        )
+        
+        db.session.add(new_user)
+        db.session.commit()
+        
+        current_app.logger.info(f'User {username} created by admin')
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'User {username} created successfully',
+            'user': {
+                'id': new_user.id,
+                'username': new_user.username,
+                'role': new_user.role
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@bp.route('/api/users/<int:user_id>', methods=['PUT'])
+@require_login
+@require_admin
+def api_update_user(user_id):
+    """Update user (admin only)"""
+    from models.database import User
+    
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User not found'}), 404
+    
+    # Update fields
+    if 'email' in data and data['email']:
+        if User.query.filter(User.email == data['email'], User.id != user_id).first():
+            return jsonify({'status': 'error', 'message': 'Email already in use'}), 400
+        user.email = data['email']
+    
+    if 'role' in data and data['role'] in ['admin', 'viewer', 'operator']:
+        user.role = data['role']
+    
+    if 'full_name' in data:
+        user.full_name = data['full_name'] if data['full_name'] else None
+    
+    if 'department' in data:
+        user.department = data['department'] if data['department'] else None
+    
+    if 'is_active' in data:
+        user.is_active = bool(data['is_active'])
+    
+    try:
+        db.session.commit()
+        current_app.logger.info(f'User {user.username} updated by admin')
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'User updated successfully'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@bp.route('/api/users/<int:user_id>', methods=['DELETE'])
+@require_login
+@require_admin
+def api_delete_user(user_id):
+    """Disable user (soft delete)"""
+    from models.database import User
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User not found'}), 404
+    
+    # Prevent disabling yourself
+    current_user = get_current_user()
+    if current_user and current_user.id == user_id:
+        return jsonify({'status': 'error', 'message': 'Cannot disable your own account'}), 400
+    
+    try:
+        user.is_active = False
+        db.session.commit()
+        current_app.logger.info(f'User {user.username} disabled by admin')
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'User {user.username} has been disabled'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
