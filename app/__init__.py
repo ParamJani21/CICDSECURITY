@@ -86,16 +86,16 @@ def create_app():
 
     # File handler
     file_handler = RotatingFileHandler(log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding='utf-8')
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(formatter)
 
     # Console handler
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(logging.WARNING)
     console_handler.setFormatter(formatter)
 
     # Attach handlers to app.logger and werkzeug logger
-    app.logger.setLevel(logging.DEBUG)
+    app.logger.setLevel(logging.INFO)
     app.logger.addHandler(file_handler)
     app.logger.addHandler(console_handler)
 
@@ -111,14 +111,14 @@ def create_app():
 
     # Configure root logger so all modules (control_apis, scan_api, etc) inherit handlers
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(logging.INFO)
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
     
     # Suppress noisy loggers
-    logging.getLogger('watchdog').setLevel(logging.WARNING)
-    logging.getLogger('watchdog.observers').setLevel(logging.WARNING)
-    logging.getLogger('watchdog.observers.inotify_buffer').setLevel(logging.WARNING)
+    logging.getLogger('watchdog').setLevel(logging.ERROR)
+    logging.getLogger('watchdog.observers').setLevel(logging.ERROR)
+    logging.getLogger('watchdog.observers.inotify_buffer').setLevel(logging.ERROR)
 
     from app.routes import bp
     app.register_blueprint(bp)

@@ -5,61 +5,53 @@ Updates PR status checks with scan results
 
 import requests
 import logging
-from modules.repos import get_github_app_token
+from app import create_app
 
 logger = logging.getLogger(__name__)
 
 
 def set_github_status_check(repo_owner, repo_name, sha, state, context, 
-                           description, target_url=None):
+                            description, target_url=None):
     """
     Set a GitHub status check on a commit
-    
-    Args:
-        repo_owner: Repository owner
-        repo_name: Repository name
-        sha: Commit SHA
-        state: 'pending', 'success', 'failure', or 'error'
-        context: Status context (e.g., 'cicdsecurity/scan')
-        description: Human-readable description
-        target_url: Link to details (optional)
-    
-    Returns:
-        bool: True if successful
     """
-    try:
-        # Validate state
-        valid_states = ['pending', 'success', 'failure', 'error']
+    app = create_app()
+    
+    def _do_set():
+        from modules.repos import get_installations, get_installation_token
+        
+        valid_states = ['pending', 'success', 'failure', 'error', 'neutral']
         if state not in valid_states:
             logger.warning(f'Invalid GitHub status state: {state}')
             return False
         
-        # Get GitHub token
-        token = get_github_app_token()
-        if not token:
-            logger.warning('No GitHub app token available for status check')
+        installations = get_installations()
+        if not installations:
+            logger.warning('No GitHub App installations found')
             return False
         
-        # Build status check payload
+        inst_token = get_installation_token(installations[0])
+        if not inst_token:
+            logger.warning('No installation token available')
+            return False
+        
         payload = {
             'state': state,
             'context': context,
-            'description': description
+            'description': description[:100] if len(description) > 100 else description
         }
         
         if target_url:
             payload['target_url'] = target_url
         
-        # GitHub API endpoint
         url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/statuses/{sha}'
         
         headers = {
-            'Authorization': f'token {token}',
+            'Authorization': f'token {inst_token}',
             'Accept': 'application/vnd.github.v3+json',
             'User-Agent': 'CICDSECURITY/1.0'
         }
         
-        # Send status check
         response = requests.post(url, json=payload, headers=headers, timeout=10)
         
         if response.status_code == 201:
@@ -69,37 +61,30 @@ def set_github_status_check(repo_owner, repo_name, sha, state, context,
             logger.warning(f'Failed to set GitHub status: {response.status_code} {response.text}')
             return False
     
-    except Exception as e:
-        logger.exception(f'Error setting GitHub status check: {e}')
-        return False
+    with app.app_context():
+        return _do_set()
 
 
 def create_github_check_run(repo_owner, repo_name, head_sha, name='CICDSECURITY Scan', 
-                           status='queued', conclusion=None, details_url=None):
+                            status='queued', conclusion=None, details_url=None):
     """
     Create a GitHub Check Run (more detailed than status checks)
-    Supports more features like annotations, output, etc.
-    
-    Args:
-        repo_owner: Repository owner
-        repo_name: Repository name
-        head_sha: Commit SHA
-        name: Check run name
-        status: 'queued', 'in_progress', 'completed'
-        conclusion: 'success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out'
-        details_url: URL for more details
-    
-    Returns:
-        dict: Check run data if successful, None otherwise
     """
-    try:
-        # Get GitHub token
-        token = get_github_app_token()
-        if not token:
-            logger.warning('No GitHub app token available for check run')
+    app = create_app()
+    
+    def _do_create():
+        from modules.repos import get_installations, get_installation_token
+        
+        installations = get_installations()
+        if not installations:
+            logger.warning('No GitHub App installations found')
             return None
         
-        # Build payload
+        inst_token = get_installation_token(installations[0])
+        if not inst_token:
+            logger.warning('No installation token available')
+            return None
+        
         payload = {
             'name': name,
             'head_sha': head_sha,
@@ -112,16 +97,14 @@ def create_github_check_run(repo_owner, repo_name, head_sha, name='CICDSECURITY 
         if details_url:
             payload['details_url'] = details_url
         
-        # GitHub API endpoint
         url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/check-runs'
         
         headers = {
-            'Authorization': f'token {token}',
+            'Authorization': f'token {inst_token}',
             'Accept': 'application/vnd.github.checks-preview+json',
             'User-Agent': 'CICDSECURITY/1.0'
         }
         
-        # Send check run creation
         response = requests.post(url, json=payload, headers=headers, timeout=10)
         
         if response.status_code == 201:
@@ -132,39 +115,29 @@ def create_github_check_run(repo_owner, repo_name, head_sha, name='CICDSECURITY 
             logger.warning(f'Failed to create GitHub check run: {response.status_code} {response.text}')
             return None
     
-    except Exception as e:
-        logger.exception(f'Error creating GitHub check run: {e}')
-        return None
+    with app.app_context():
+        return _do_create()
 
 
 def update_github_check_run(repo_owner, repo_name, check_run_id, status='in_progress', 
-                           conclusion=None, details_url=None, output=None):
+                            conclusion=None, details_url=None, output=None):
     """
     Update an existing GitHub Check Run
-    
-    Args:
-        repo_owner: Repository owner
-        repo_name: Repository name
-        check_run_id: Check run ID
-        status: 'queued', 'in_progress', 'completed'
-        conclusion: 'success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out'
-        details_url: URL for more details
-        output: dict with 'title', 'summary', 'text', 'annotations'
-    
-    Returns:
-        bool: True if successful
     """
-    try:
-        # Get GitHub token
-        token = get_github_app_token()
-        if not token:
-            logger.warning('No GitHub app token available for check run update')
+    app = create_app()
+    
+    def _do_update():
+        from modules.repos import get_installations, get_installation_token
+        
+        installations = get_installations()
+        if not installations:
             return False
         
-        # Build payload
-        payload = {
-            'status': status
-        }
+        inst_token = get_installation_token(installations[0])
+        if not inst_token:
+            return False
+        
+        payload = {'status': status}
         
         if conclusion:
             payload['conclusion'] = conclusion
@@ -175,16 +148,14 @@ def update_github_check_run(repo_owner, repo_name, check_run_id, status='in_prog
         if output:
             payload['output'] = output
         
-        # GitHub API endpoint
         url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/check-runs/{check_run_id}'
         
         headers = {
-            'Authorization': f'token {token}',
+            'Authorization': f'token {inst_token}',
             'Accept': 'application/vnd.github.checks-preview+json',
             'User-Agent': 'CICDSECURITY/1.0'
         }
         
-        # Send check run update
         response = requests.patch(url, json=payload, headers=headers, timeout=10)
         
         if response.status_code == 200:
@@ -194,6 +165,5 @@ def update_github_check_run(repo_owner, repo_name, check_run_id, status='in_prog
             logger.warning(f'Failed to update GitHub check run: {response.status_code} {response.text}')
             return False
     
-    except Exception as e:
-        logger.exception(f'Error updating GitHub check run: {e}')
-        return False
+    with app.app_context():
+        return _do_update()

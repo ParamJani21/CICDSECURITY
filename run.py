@@ -84,9 +84,9 @@ def start_ngrok_tunnel(port=5000):
     try:
         print(f"🚀 Starting ngrok tunnel on port {port}...")
         
-        # Start ngrok tunnel
+        # Start ngrok tunnel with custom subdomain
         ngrok_process = subprocess.Popen(
-            ['ngrok', 'http', str(port), '--log=stdout'],
+            ['ngrok', 'http', '--url=tackier-porsha-nonfacetiously.ngrok-free.dev', str(port), '--log=stdout'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
