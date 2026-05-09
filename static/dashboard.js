@@ -702,46 +702,15 @@ function loadHistory() {
                     const low = severity.LOW || 0;
                     const total = scan.total_findings || 0;
                     
-                    // PR Scan Status
-                    const isPrScan = scan.is_pr_scan || false;
-                    const prNumber = scan.pr_number || null;
-                    const prTitle = scan.pr_title || null;
-                    const scanStatus = scan.scan_status || 'unknown';
-                    const isPending = scanStatus === 'pending' || scanStatus === 'in_progress';
-                    
-                    // Build status indicator
-                    let statusIndicator = '';
-                    if (isPending) {
-                        statusIndicator = '<span class="scan-status-badge loading" title="Scan in progress">👁️ Scanning...</span>';
-                    } else if (scanStatus === 'failed') {
-                        statusIndicator = '<span class="scan-status-badge failed" title="Scan failed">⚠️ Failed</span>';
-                    } else if (scanStatus === 'completed') {
-                        statusIndicator = '<span class="scan-status-badge completed" title="Scan completed">✓ Done</span>';
-                    }
-                    
-                    // Build PR label
-                    let prLabel = '';
-                    if (isPrScan && prNumber) {
-                        prLabel = `<span class="pr-badge" title="Pull Request #${prNumber}: ${prTitle}">#${prNumber} ${prTitle ? '- ' + prTitle.substring(0, 30) : ''}</span>`;
-                    }
-                    
                     html += `
-                        <div class="history-item" data-scan-id="${scan.scan_id}" data-scan-status="${scanStatus}">
+                        <div class="history-item" data-scan-id="${scan.scan_id}">
                             <div class="history-row" onclick="toggleScanDetails('${scan.scan_id}')">
                                 <div class="col-checkbox">
                                     <input type="checkbox" class="scan-checkbox" data-scan-id="${scan.scan_id}" onclick="event.stopPropagation(); updateDeleteButton(); saveCheckboxState()">
                                 </div>
                                 <div class="col-time">${formatDate(scan.timestamp)}</div>
-                                <div class="col-repo">
-                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <span>${scan.repository || 'Unknown'}</span>
-                                        ${prLabel}
-                                    </div>
-                                </div>
+                                <div class="col-repo">${scan.repository || 'Unknown'}</div>
                                 <div class="col-branch">${branch}</div>
-                                <div class="col-status">
-                                    ${statusIndicator}
-                                </div>
                                 <div class="col-total">${total}</div>
                                 <div class="col-severity">
                                     <span class="severity-badge critical">${critical}</span>
@@ -756,17 +725,8 @@ function loadHistory() {
                                     <div class="details-header">
                                         <h4>Scan: ${scan.scan_id}</h4>
                                         <span class="repo-name">${scan.repository || 'Unknown'}</span>
-                                        ${isPrScan ? `<span class="pr-badge-detail">Pull Request #${prNumber}</span>` : ''}
                                         <span class="scan-branch" style="margin-left: 1rem;">Branch: <strong>${branch}</strong></span>
-                                        ${statusIndicator ? `<div style="margin-left: auto;">${statusIndicator}</div>` : ''}
                                     </div>
-                                    ${isPrScan ? `
-                                        <div class="pr-details-section">
-                                            <div class="pr-detail-item">
-                                                <strong>PR #${prNumber}:</strong> ${prTitle || 'N/A'}
-                                            </div>
-                                        </div>
-                                    ` : ''}
                                     <div class="details-grid">
                                         <div class="detail-card">
                                              <h5>Severity</h5>

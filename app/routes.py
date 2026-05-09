@@ -1301,7 +1301,7 @@ def handle_pr_webhook(payload):
         current_app.logger.info(f'Pull Request {action}: {repo_owner}/{repo_name}#{pr_number} - {pr_title}')
         
         # Handle different PR actions
-        if action == 'opened':
+        if action in ['opened', 'reopened', 'synchronize']:
             current_app.logger.info(f'PR #{pr_number} opened in {repo_owner}/{repo_name}, triggering scan...')
             
             # Trigger security scan
