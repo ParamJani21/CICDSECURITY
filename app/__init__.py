@@ -138,9 +138,10 @@ def create_app():
     @app.before_request
     def check_authentication():
         """Check if user is authenticated before accessing protected routes"""
-        # Skip for static files, auth routes, and login page
+        # Skip for static files, auth routes, login page, and GitHub webhooks
         if (request.path.startswith('/static/') or 
             request.path.startswith('/auth/') or 
+            request.path.startswith('/github/') or
             request.path in ['/login', '/', '/auth/setup/initial-admin']):
             return
         

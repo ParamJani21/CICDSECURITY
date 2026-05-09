@@ -45,10 +45,14 @@ def get_scan_history():
                 'repository': 'Unknown',
                 'branch': 'unknown',
                 'status': 'unknown',
+                'scan_status': 'completed',  # Default to completed
                 'total_findings': 0,
                 'severity': {},
                 'category': {},
                 'multi_source': 0,
+                'is_pr_scan': False,
+                'pr_number': None,
+                'pr_title': None,
                 'has_merged': os.path.exists(merged_file),
                 'has_opengrep': os.path.exists(opengrep_file),
                 'has_truffle': os.path.exists(truffle_file),
@@ -71,6 +75,12 @@ def get_scan_history():
                         repo_name = merged.get('repo_name', '')
                         scan_data['repository'] = f"{repo_owner}/{repo_name}" if repo_owner and repo_name else (repo_name or 'Unknown')
                         scan_data['branch'] = merged.get('repo_branch', 'unknown')
+                        
+                        # PR Scan metadata
+                        scan_data['is_pr_scan'] = merged.get('is_pr_scan', False)
+                        scan_data['pr_number'] = merged.get('pr_number', None)
+                        scan_data['pr_title'] = merged.get('pr_title', None)
+                        scan_data['scan_status'] = merged.get('scan_status', 'completed')
                         
                         summary = merged.get('summary', {})
                         scan_data['total_findings'] = summary.get('total_unique', 0)

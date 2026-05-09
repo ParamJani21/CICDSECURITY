@@ -263,6 +263,12 @@ class ScanHistory(db.Model):
     repo_owner = db.Column(db.String(255))
     repo_branch = db.Column(db.String(100))
     
+    # PR Scan fields
+    is_pr_scan = db.Column(db.Boolean, default=False, index=True)  # True if this is a PR scan
+    pr_number = db.Column(db.Integer, nullable=True, index=True)  # PR number (e.g., 42)
+    pr_title = db.Column(db.String(500), nullable=True)  # PR title
+    pr_head_ref = db.Column(db.String(255), nullable=True)  # PR branch ref (e.g., refs/pull/42/head)
+    
     scan_types = db.Column(db.Text)  # JSON: ["sats", "sbom", "secret"]
     scan_status = db.Column(db.String(50), default='running')  # running, completed, failed
     
@@ -294,5 +300,10 @@ class ScanHistory(db.Model):
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
             'duration_seconds': self.duration_seconds,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat(),
+            # PR Scan fields
+            'is_pr_scan': self.is_pr_scan,
+            'pr_number': self.pr_number,
+            'pr_title': self.pr_title,
+            'pr_head_ref': self.pr_head_ref
         }

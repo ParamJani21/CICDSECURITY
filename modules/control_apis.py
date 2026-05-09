@@ -1072,11 +1072,25 @@ def save_scan_results(scan_results, scan_id):
         return None
 
 
-def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, repo_name=None, repo_owner=None, repo_branch=None):
+def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, repo_name=None, repo_owner=None, repo_branch=None, is_pr_scan=False, pr_number=None, pr_title=None, pr_head_ref=None, scan_types=None):
     """
     Merge findings from all 3 tools (OpenGrep, TruffleHog, Trivy) into unified structure.
     Removes duplicates by file + line + issue type, but keeps all tool sources.
     Excludes findings from .git/ directory (artifacts of scanning process, not repo findings).
+    
+    Args:
+        opengrep_results: OpenGrep scan results
+        truffle_results: TruffleHog scan results
+        trivy_results: Trivy scan results
+        scan_id: Unique scan ID
+        repo_name: Repository name
+        repo_owner: Repository owner
+        repo_branch: Branch scanned
+        is_pr_scan: Whether this is a PR scan
+        pr_number: PR number (if PR scan)
+        pr_title: PR title (if PR scan)
+        pr_head_ref: PR head reference (if PR scan)
+        scan_types: List of scan types run
     """
     logger.info('=' * 80)
     logger.info('🔄 MERGING FINDINGS FROM ALL TOOLS')
@@ -1225,6 +1239,12 @@ def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, re
         'repo_name': repo_name,
         'repo_owner': repo_owner,
         'repo_branch': repo_branch,
+        'scan_source': 'pr_webhook' if is_pr_scan else 'manual',
+        'is_pr_scan': is_pr_scan,
+        'pr_number': pr_number if is_pr_scan else None,
+        'pr_title': pr_title if is_pr_scan else None,
+        'pr_head_ref': pr_head_ref if is_pr_scan else None,
+        'scan_types': scan_types or ['sats', 'sbom', 'secret'],
         'summary': {
             'total_unique': len(merged_findings),
             'multi_source_findings': multi_source,
@@ -1244,12 +1264,15 @@ def merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, re
     logger.info(f'[Merge]   MEDIUM: {severity_counts.get("MEDIUM", 0)}')
     logger.info(f'[Merge]   LOW: {severity_counts.get("LOW", 0)}')
     logger.info(f'[Merge]   Multi-source: {multi_source}')
+    if is_pr_scan:
+        logger.info(f'[Merge]   PR Scan: #{pr_number} - {pr_title}')
     logger.info('=' * 80)
     
     return merged_result
 
 
-def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main', scan_types=None):
+def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main', scan_types=None, 
+                 is_pr_scan=False, pr_number=None, pr_title=None, pr_head_ref=None):
     """
     Main entry point - Complete scan workflow (clone -> scan -> save -> cleanup)
     
@@ -1260,6 +1283,10 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main', s
         repo_url: Repository URL
         repo_branch: Branch to scan (default: main)
         scan_types: List of scan types to run ['sats', 'sbom', 'secret'], default all
+        is_pr_scan: Boolean - True if this is a PR scan
+        pr_number: PR number (e.g., 42)
+        pr_title: PR title
+        pr_head_ref: PR head reference (e.g., 'refs/pull/42/head')
     
     Returns:
         Dict with status and scan details
@@ -1386,7 +1413,17 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main', s
         logger.info(f'║ STEP {step_num}/6: MERGING FINDINGS'.ljust(79) + '║')
         logger.info('╚' + '─' * 78 + '╝')
         
-        merged_results = merge_findings(opengrep_results, truffle_results, trivy_results, scan_id, repo_name, repo_owner, repo_branch)
+        merged_results = merge_findings(
+            opengrep_results, truffle_results, trivy_results, scan_id, 
+            repo_name=repo_name, 
+            repo_owner=repo_owner, 
+            repo_branch=repo_branch,
+            is_pr_scan=is_pr_scan,
+            pr_number=pr_number,
+            pr_title=pr_title,
+            pr_head_ref=pr_head_ref,
+            scan_types=scan_types
+        )
         logger.info(f'[Step {step_num}] ✓ Merged: {merged_results["summary"]["total_unique"]} unique findings')
         
         # ========== STEP 6: SAVE RESULTS ==========
@@ -1470,7 +1507,12 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main', s
             'opengrep_findings': opengrep_results.get('findings_count', 0),
             'trivy_findings': trivy_results.get('findings_count', 0),
             'total_findings': opengrep_results.get('findings_count', 0) + trivy_results.get('findings_count', 0),
-            'cleanup_success': cleanup_success
+            'cleanup_success': cleanup_success,
+            # PR Scan metadata
+            'is_pr_scan': is_pr_scan,
+            'pr_number': pr_number,
+            'pr_title': pr_title,
+            'pr_head_ref': pr_head_ref
         }
     
     except Exception as e:

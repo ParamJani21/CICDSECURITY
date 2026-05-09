@@ -1,6 +1,9 @@
 from flask import Blueprint, render_template, jsonify, request, current_app, session, redirect, url_for
 import sys
 import os
+import hmac
+import hashlib
+import json
 
 # Add parent directory to path for module imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -406,6 +409,7 @@ def api_save_github_credentials():
             github_app_name=data.get('github_app_name', ''),
             github_secret_key=data.get('github_secret_key', ''),
             ngrok_oauth_token=data.get('ngrok_oauth_token', ''),
+            github_webhook_secret=data.get('github_webhook_secret', ''),
             user_id=user.id  # Pass current user ID for encryption
         )
         
@@ -1191,4 +1195,252 @@ def api_delete_user(user_id):
         })
     except Exception as e:
         db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# ============ GITHUB WEBHOOK LISTENER ============
+
+@bp.route('/github/webhook', methods=['POST'])
+def github_webhook():
+    """
+    GitHub Webhook endpoint - receives webhook events from GitHub App
+    Verifies signature and processes events
+    
+    Returns:
+        JSON response with status
+    """
+    from modules.env_config import env_config
+    
+    try:
+        # Get the webhook secret from .env
+        webhook_secret = env_config.get_github_credentials().get('github_webhook_secret', '')
+        
+        if not webhook_secret:
+            current_app.logger.warning('GitHub webhook received but GITHUB_WEBHOOK_SECRET not configured')
+            return jsonify({'status': 'error', 'message': 'Webhook secret not configured'}), 400
+        
+        # Verify webhook signature
+        signature_header = request.headers.get('X-Hub-Signature-256', '')
+        
+        if not signature_header:
+            current_app.logger.warning('GitHub webhook received without signature header')
+            return jsonify({'status': 'error', 'message': 'No signature provided'}), 400
+        
+        # Get raw body for signature verification
+        body = request.get_data()
+        
+        # Compute HMAC-SHA256
+        computed_signature = 'sha256=' + hmac.new(
+            webhook_secret.encode(),
+            body,
+            hashlib.sha256
+        ).hexdigest()
+        
+        # Verify signature
+        if not hmac.compare_digest(signature_header, computed_signature):
+            current_app.logger.warning(f'GitHub webhook signature verification failed')
+            return jsonify({'status': 'error', 'message': 'Signature verification failed'}), 403
+        
+        # Parse JSON payload
+        payload = request.get_json()
+        
+        if not payload:
+            return jsonify({'status': 'error', 'message': 'No JSON payload'}), 400
+        
+        # Get event type from headers
+        event_type = request.headers.get('X-GitHub-Event', 'unknown')
+        
+        # Log the webhook event
+        current_app.logger.info(f'GitHub webhook received: {event_type}')
+        current_app.logger.debug(f'Webhook payload: {json.dumps(payload, indent=2)}')
+        
+        # Handle different event types
+        if event_type == 'pull_request':
+            return handle_pr_webhook(payload)
+        elif event_type == 'push':
+            return handle_push_webhook(payload)
+        elif event_type == 'issues':
+            return handle_issues_webhook(payload)
+        elif event_type == 'ping':
+            return jsonify({'status': 'success', 'message': 'Webhook configured successfully'}), 200
+        else:
+            current_app.logger.debug(f'Unhandled webhook event type: {event_type}')
+            return jsonify({'status': 'success', 'message': f'Event type {event_type} received but not processed'}), 200
+    
+    except Exception as e:
+        current_app.logger.error(f'Error processing GitHub webhook: {str(e)}')
+        return jsonify({'status': 'error', 'message': f'Error processing webhook: {str(e)}'}), 500
+
+
+def handle_pr_webhook(payload):
+    """
+    Handle pull_request events from GitHub webhook
+    Automatically triggers security scans on PR open and synchronize events
+    
+    Args:
+        payload: GitHub webhook payload
+    
+    Returns:
+        JSON response with status
+    """
+    try:
+        from modules.pr_scan_handler import trigger_pr_scan
+        from modules.repos import get_repositories
+        
+        action = payload.get('action', '')
+        pr = payload.get('pull_request', {})
+        repo = payload.get('repository', {})
+        
+        pr_number = pr.get('number', 'unknown')
+        pr_title = pr.get('title', '')
+        pr_head_sha = pr.get('head', {}).get('sha', '')
+        repo_name = repo.get('name', 'unknown')
+        repo_owner = repo.get('owner', {}).get('login', 'unknown')
+        repo_id = repo.get('id', '')
+        repo_url = repo.get('clone_url', f'https://github.com/{repo_owner}/{repo_name}.git')
+        
+        current_app.logger.info(f'Pull Request {action}: {repo_owner}/{repo_name}#{pr_number} - {pr_title}')
+        
+        # Handle different PR actions
+        if action == 'opened':
+            current_app.logger.info(f'PR #{pr_number} opened in {repo_owner}/{repo_name}, triggering scan...')
+            
+            # Trigger security scan
+            scan_result = trigger_pr_scan(
+                repo_id=repo_id,
+                repo_name=repo_name,
+                repo_owner=repo_owner,
+                repo_url=repo_url,
+                pr_number=pr_number,
+                pr_title=pr_title,
+                pr_head_sha=pr_head_sha,
+                scan_types=['sats', 'sbom', 'secret']  # Default scan types
+            )
+            
+            current_app.logger.info(f'PR scan triggered: {scan_result.get("scan_id")}')
+            
+            return jsonify({
+                'status': 'success',
+                'message': f'PR #{pr_number} opened, scan triggered',
+                'pr_number': pr_number,
+                'repo': f'{repo_owner}/{repo_name}',
+                'scan_id': scan_result.get('scan_id'),
+                'scan_status': 'pending'
+            }), 200
+        
+        elif action == 'synchronize':
+            current_app.logger.info(f'PR #{pr_number} synchronized (new commits), triggering re-scan...')
+            
+            # Trigger new scan for updated PR
+            scan_result = trigger_pr_scan(
+                repo_id=repo_id,
+                repo_name=repo_name,
+                repo_owner=repo_owner,
+                repo_url=repo_url,
+                pr_number=pr_number,
+                pr_title=pr_title,
+                pr_head_sha=pr_head_sha,
+                scan_types=['sats', 'sbom', 'secret']
+            )
+            
+            current_app.logger.info(f'PR re-scan triggered: {scan_result.get("scan_id")}')
+            
+            return jsonify({
+                'status': 'success',
+                'message': f'PR #{pr_number} synchronized, re-scan triggered',
+                'pr_number': pr_number,
+                'repo': f'{repo_owner}/{repo_name}',
+                'scan_id': scan_result.get('scan_id'),
+                'scan_status': 'pending'
+            }), 200
+        
+        elif action == 'closed':
+            current_app.logger.info(f'PR #{pr_number} closed')
+            # Could archive/cleanup PR scan results here if needed
+            
+            return jsonify({
+                'status': 'success',
+                'message': f'PR #{pr_number} closed',
+                'pr_number': pr_number,
+                'repo': f'{repo_owner}/{repo_name}'
+            }), 200
+        
+        else:
+            # Other PR actions (edited, assigned, labeled, etc.) - no action needed
+            return jsonify({
+                'status': 'success',
+                'message': f'PR event {action} received but not processed',
+                'pr_number': pr_number,
+                'repo': f'{repo_owner}/{repo_name}'
+            }), 200
+    
+    except Exception as e:
+        current_app.logger.error(f'Error handling PR webhook: {str(e)}')
+        import traceback
+        current_app.logger.exception(traceback.format_exc())
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+def handle_push_webhook(payload):
+    """
+    Handle push events from GitHub webhook
+    
+    Args:
+        payload: GitHub webhook payload
+    
+    Returns:
+        JSON response with status
+    """
+    try:
+        repo = payload.get('repository', {})
+        ref = payload.get('ref', '')
+        branch = ref.replace('refs/heads/', '')
+        
+        repo_name = repo.get('name', 'unknown')
+        repo_owner = repo.get('owner', {}).get('login', 'unknown')
+        
+        current_app.logger.info(f'Push to {repo_owner}/{repo_name}:{branch}')
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Push event processed',
+            'repo': f'{repo_owner}/{repo_name}',
+            'branch': branch
+        }), 200
+    
+    except Exception as e:
+        current_app.logger.error(f'Error handling push webhook: {str(e)}')
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+def handle_issues_webhook(payload):
+    """
+    Handle issues events from GitHub webhook
+    
+    Args:
+        payload: GitHub webhook payload
+    
+    Returns:
+        JSON response with status
+    """
+    try:
+        action = payload.get('action', '')
+        issue = payload.get('issue', {})
+        repo = payload.get('repository', {})
+        
+        issue_number = issue.get('number', 'unknown')
+        issue_title = issue.get('title', '')
+        repo_name = repo.get('name', 'unknown')
+        repo_owner = repo.get('owner', {}).get('login', 'unknown')
+        
+        current_app.logger.info(f'Issue {action}: {repo_owner}/{repo_name}#{issue_number} - {issue_title}')
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Issue event {action} processed',
+            'issue_number': issue_number,
+            'repo': f'{repo_owner}/{repo_name}'
+        }), 200
+    
+    except Exception as e:
+        current_app.logger.error(f'Error handling issues webhook: {str(e)}')
         return jsonify({'status': 'error', 'message': str(e)}), 500

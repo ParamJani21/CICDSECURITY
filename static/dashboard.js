@@ -702,15 +702,46 @@ function loadHistory() {
                     const low = severity.LOW || 0;
                     const total = scan.total_findings || 0;
                     
+                    // PR Scan Status
+                    const isPrScan = scan.is_pr_scan || false;
+                    const prNumber = scan.pr_number || null;
+                    const prTitle = scan.pr_title || null;
+                    const scanStatus = scan.scan_status || 'unknown';
+                    const isPending = scanStatus === 'pending' || scanStatus === 'in_progress';
+                    
+                    // Build status indicator
+                    let statusIndicator = '';
+                    if (isPending) {
+                        statusIndicator = '<span class="scan-status-badge loading" title="Scan in progress">👁️ Scanning...</span>';
+                    } else if (scanStatus === 'failed') {
+                        statusIndicator = '<span class="scan-status-badge failed" title="Scan failed">⚠️ Failed</span>';
+                    } else if (scanStatus === 'completed') {
+                        statusIndicator = '<span class="scan-status-badge completed" title="Scan completed">✓ Done</span>';
+                    }
+                    
+                    // Build PR label
+                    let prLabel = '';
+                    if (isPrScan && prNumber) {
+                        prLabel = `<span class="pr-badge" title="Pull Request #${prNumber}: ${prTitle}">#${prNumber} ${prTitle ? '- ' + prTitle.substring(0, 30) : ''}</span>`;
+                    }
+                    
                     html += `
-                        <div class="history-item" data-scan-id="${scan.scan_id}">
+                        <div class="history-item" data-scan-id="${scan.scan_id}" data-scan-status="${scanStatus}">
                             <div class="history-row" onclick="toggleScanDetails('${scan.scan_id}')">
                                 <div class="col-checkbox">
                                     <input type="checkbox" class="scan-checkbox" data-scan-id="${scan.scan_id}" onclick="event.stopPropagation(); updateDeleteButton(); saveCheckboxState()">
                                 </div>
                                 <div class="col-time">${formatDate(scan.timestamp)}</div>
-                                <div class="col-repo">${scan.repository || 'Unknown'}</div>
+                                <div class="col-repo">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span>${scan.repository || 'Unknown'}</span>
+                                        ${prLabel}
+                                    </div>
+                                </div>
                                 <div class="col-branch">${branch}</div>
+                                <div class="col-status">
+                                    ${statusIndicator}
+                                </div>
                                 <div class="col-total">${total}</div>
                                 <div class="col-severity">
                                     <span class="severity-badge critical">${critical}</span>
@@ -725,8 +756,17 @@ function loadHistory() {
                                     <div class="details-header">
                                         <h4>Scan: ${scan.scan_id}</h4>
                                         <span class="repo-name">${scan.repository || 'Unknown'}</span>
+                                        ${isPrScan ? `<span class="pr-badge-detail">Pull Request #${prNumber}</span>` : ''}
                                         <span class="scan-branch" style="margin-left: 1rem;">Branch: <strong>${branch}</strong></span>
+                                        ${statusIndicator ? `<div style="margin-left: auto;">${statusIndicator}</div>` : ''}
                                     </div>
+                                    ${isPrScan ? `
+                                        <div class="pr-details-section">
+                                            <div class="pr-detail-item">
+                                                <strong>PR #${prNumber}:</strong> ${prTitle || 'N/A'}
+                                            </div>
+                                        </div>
+                                    ` : ''}
                                     <div class="details-grid">
                                         <div class="detail-card">
                                              <h5>Severity</h5>
@@ -758,9 +798,9 @@ function loadHistory() {
                                         <div class="findings-loading" style="display: none;">Loading findings...</div>
                                     </div>
                                  </div>
-                              </div>
-                          </div>`;
-                  });
+                               </div>
+                           </div>`;
+                   });
             } else {
                 html = '<div style="grid-column: 1 / -1; padding: 2rem; text-align: center; color: #64748b;">No scans found. Trigger a scan to see results here.</div>';
             }
@@ -988,7 +1028,29 @@ function loadSettings() {
                     secretEl.placeholder = 'Private key is stored securely. Click "Replace Key" to provide a new one.';
                     secretEl.setAttribute('readonly', 'true');
                 }
-                document.getElementById('ngrok_oauth_token').value = creds.ngrok_oauth_token || '';
+                
+                // For ngrok token and webhook secret, clear the fields but show status
+                const ngrokEl = document.getElementById('ngrok_oauth_token');
+                const webhookEl = document.getElementById('github_webhook_secret');
+                
+                if (ngrokEl) {
+                    ngrokEl.value = '';
+                    if (creds.ngrok_oauth_token) {
+                        ngrokEl.placeholder = '✓ Token saved (' + creds.ngrok_oauth_token_masked + ')';
+                    } else {
+                        ngrokEl.placeholder = 'Enter your Ngrok OAuth Token';
+                    }
+                }
+                
+                if (webhookEl) {
+                    webhookEl.value = '';
+                    if (creds.github_webhook_secret) {
+                        webhookEl.placeholder = '✓ Secret saved (' + creds.github_webhook_secret_masked + ')';
+                    } else {
+                        webhookEl.placeholder = 'Enter your GitHub Webhook Secret';
+                    }
+                }
+                
                 sendClientLog('loadSettings_success', { github_app_id: !!creds.github_app_id });
             } else {
                 sendClientLog('loadSettings_error', { message: data.message || 'unknown' }, 'error');
@@ -1033,7 +1095,8 @@ function loadSettings() {
             github_app_id: document.getElementById('github_app_id').value.trim(),
             github_app_name: document.getElementById('github_app_name').value.trim(),
             github_secret_key: (document.getElementById('github_secret_key').value || '').trim(),
-            ngrok_oauth_token: document.getElementById('ngrok_oauth_token').value.trim()
+            ngrok_oauth_token: document.getElementById('ngrok_oauth_token').value.trim(),
+            github_webhook_secret: document.getElementById('github_webhook_secret').value.trim()
         };
 
         if (!Object.values(formData).some(v => v !== '')) {
@@ -1054,12 +1117,13 @@ function loadSettings() {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                showSettingsStatus('✓ Credentials saved successfully to .env file', 'success');
+                showSettingsStatus('✓ Credentials saved successfully!', 'success');
                 sendClientLog('saveSettings_success', { github_app_id: !!formData.github_app_id });
                 setTimeout(() => {
-                    form.reset();
+                    // Reload settings from server to display saved values
+                    loadSettings();
                     statusDiv.innerHTML = '';
-                }, 2000);
+                }, 1500);
             } else {
                 showSettingsStatus('✗ ' + (data.message || 'Failed to save credentials'), 'error');
                 sendClientLog('saveSettings_error', { message: data.message || 'unknown' }, 'error');

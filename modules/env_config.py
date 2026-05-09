@@ -135,14 +135,16 @@ class EnvConfigManager:
             'github_app_id': env_vars.get('GITHUB_APP_ID', ''),
             'github_app_name': env_vars.get('GITHUB_APP_NAME', ''),
             'github_secret_key': env_vars.get('GITHUB_SECRET_KEY', ''),
-            'ngrok_oauth_token': env_vars.get('NGROK_OAUTH_TOKEN', '')
+            'ngrok_oauth_token': env_vars.get('NGROK_OAUTH_TOKEN', ''),
+            'github_webhook_secret': env_vars.get('GITHUB_WEBHOOK_SECRET', '')
         }
     
     def save_github_credentials(self, 
                                app_id: str = '',
                                app_name: str = '',
                                secret_key: str = '',
-                               oauth_token: str = '') -> bool:
+                               oauth_token: str = '',
+                               webhook_secret: str = '') -> bool:
         """
         Save GitHub-related credentials to .env
         
@@ -151,6 +153,7 @@ class EnvConfigManager:
             app_name: GitHub App Name
             secret_key: GitHub Secret Key
             oauth_token: ngrok OAuth Token
+            webhook_secret: GitHub Webhook Secret for signature verification
         
         Returns:
             True if successful, False otherwise
@@ -166,6 +169,8 @@ class EnvConfigManager:
             env_vars['GITHUB_SECRET_KEY'] = str(secret_key).strip()
         if oauth_token:
             env_vars['NGROK_OAUTH_TOKEN'] = str(oauth_token).strip()
+        if webhook_secret:
+            env_vars['GITHUB_WEBHOOK_SECRET'] = str(webhook_secret).strip()
         
         return self.write_env(env_vars)
 
