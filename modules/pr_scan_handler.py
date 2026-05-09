@@ -81,6 +81,7 @@ def _run_pr_scan_background(scan_id, repo_id, repo_name, repo_owner, repo_url,
     from app import create_app
     from modules.github_status import set_github_status_check
     from modules.control_apis import trigger_scan
+    from modules.pr_comment import post_pr_comment, generate_scan_summary_comment
     from models.database import db, ScanHistory
     
     start_time = datetime.utcnow()
@@ -109,13 +110,11 @@ def _run_pr_scan_background(scan_id, repo_id, repo_name, repo_owner, repo_url,
         update_status('pending', 'Scanning for security vulnerabilities...')
         
         with app.app_context():
-            pr_url = f'{repo_url.rstrip(".git")}/pull/{pr_number}'
-            
             scan_result = trigger_scan(
                 repo_id=str(repo_id),
                 repo_name=repo_name,
                 repo_owner=repo_owner,
-                repo_url=pr_url,
+                repo_url=repo_url,
                 repo_branch='main',
                 scan_types=scan_types,
                 is_pr_scan=True,
@@ -133,9 +132,12 @@ def _run_pr_scan_background(scan_id, repo_id, repo_name, repo_owner, repo_url,
                 
                 if scan_result and scan_result.get('status') == 'success':
                     scan_history.scan_status = 'completed'
+                    logger.info(f'Scan {scan_id} completed with status success')
                     
-                    if scan_result.get('findings'):
-                        findings = scan_result['findings']
+                    findings = scan_result.get('findings', [])
+                    logger.info(f'Scan result has {len(findings)} findings')
+                    
+                    if findings:
                         summary = {
                             'total_unique': len(findings),
                             'by_severity': {},
@@ -151,15 +153,15 @@ def _run_pr_scan_background(scan_id, repo_id, repo_name, repo_owner, repo_url,
                         
                         scan_history.summary = json.dumps(summary)
                     
-                    if scan_result.get('files'):
-                        files = scan_result['files']
+                    files = scan_result.get('files', {})
+                    if files:
                         scan_history.findings_file_path = files.get('merged')
                         scan_history.opengrep_file_path = files.get('opengrep')
                         scan_history.truffle_file_path = files.get('truffle')
                         scan_history.trivy_file_path = files.get('trivy')
                     
                     db.session.commit()
-                    logger.info(f'Scan {scan_id} completed successfully')
+                    logger.info(f'Scan {scan_id} DB updated successfully')
                     
                     summary_data = json.loads(scan_history.summary) if scan_history.summary else {}
                     total_findings = summary_data.get('total_unique', 0)
@@ -172,6 +174,13 @@ def _run_pr_scan_background(scan_id, repo_id, repo_name, repo_owner, repo_url,
                         update_status('neutral', f'Found {total_findings} issues')
                     else:
                         update_status('success', f'Found {total_findings} issues')
+                    
+                    logger.info(f'About to post PR comment with {len(findings)} findings')
+                    comment_body = generate_scan_summary_comment(findings, scan_id)
+                    logger.info(f'Generated comment body length: {len(comment_body)} chars')
+                    
+                    comment_result = post_pr_comment(repo_owner, repo_name, pr_number, comment_body)
+                    logger.info(f'PR comment post result: {comment_result}')
                 
                 else:
                     scan_history.scan_status = 'failed'

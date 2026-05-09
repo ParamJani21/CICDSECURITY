@@ -1495,6 +1495,9 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main', s
         logger.info(f'Results: {results_dir}')
         logger.info('')
         
+        # ========== INCLUDE FINDINGS FOR PR SCANS ==========
+        findings = merged_results.get('findings', [])
+
         return {
             'status': 'success',
             'message': f'Successfully completed scan for {repo_owner}/{repo_name}',
@@ -1507,6 +1510,12 @@ def trigger_scan(repo_id, repo_name, repo_owner, repo_url, repo_branch='main', s
             'opengrep_findings': opengrep_results.get('findings_count', 0),
             'trivy_findings': trivy_results.get('findings_count', 0),
             'total_findings': opengrep_results.get('findings_count', 0) + trivy_results.get('findings_count', 0),
+            'findings': findings,
+            'tool_breakdown': {
+                'opengrep': opengrep_results.get('findings_count', 0),
+                'truffle': truffle_results.get('findings_count', 0),
+                'trivy': trivy_results.get('findings_count', 0)
+            },
             'cleanup_success': cleanup_success,
             # PR Scan metadata
             'is_pr_scan': is_pr_scan,
