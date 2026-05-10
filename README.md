@@ -38,23 +38,24 @@ pip install -r requirements.txt
 
 ```bash
 # OpenGrep (static analysis)
-go install github.com/PatrickKhanz/owasp-gpt@latest
+curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash
 
 # Slither (smart contract analysis - optional)
 pip install slither-analyzer
 
 # Trivy (SBOM generation)
-wget https://github.com/aquasecurity/trivy/releases/download/v0.51.0/trivy_0.51.0_Linux-64bit.tar.gz -O /tmp/trivy.tar.gz
-tar zxvf /tmp/trivy.tar.gz -C /usr/local/bin/
+curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin v0.70.0
 
 # TruffleHog (secret scanning)
-go install github.com/trufflesecurity/trufflehog/v3@latest
+git clone https://github.com/trufflesecurity/trufflehog.git
+cd trufflehog && go install
 ```
 
 Verify tools:
 ```bash
 git --version
 opengrep --version
+slither --version
 trufflehog --version
 trivy --version
 ```
@@ -65,13 +66,15 @@ trivy --version
 
 1. Go to: https://github.com/settings/apps/new
 2. Set name (e.g., "CICDSECURITY")
-3. Permissions:
+3. Enter the random URL at the HomepageURL and webhookURL(TEMP)
+4. Permissions:
    - Contents: Read
    - Pull requests: Read & Write
    - Commit statuses: Read & Write
    - Checks: Read & Write
-4. Subscribe to events: `Pull requests`
-5. Generate private key (download .pem file)
+5. Subscribe to events: `Pull requests`
+6. Create Gihub app.
+7. Find private key generation...and generate private key (download .pem file)
 
 ### 2. Run the Application
 
@@ -146,7 +149,7 @@ tail -f logs/app.log
 
 ### Verify tools installed
 ```bash
-which opengrep semgrep trufflehog trivy git
+which opengrep trufflehog trivy git
 ```
 
 ### Test webhook

@@ -643,22 +643,21 @@ def run_opengrep_scan(repo_path, scan_id):
         wsl_repo_path = get_wsl_path(repo_path)
         logger.info(f'[OpenGrep] WSL path: {wsl_repo_path}')
         
-        # Detect whether `opengrep` or `semgrep` is available in WSL (prefer opengrep)
-        logger.info('[OpenGrep] Checking for opengrep/semgrep availability in WSL...')
-        check_tool_cmd = 'command -v opengrep || command -v semgrep || true'
+        # Check if `opengrep` is available in WSL
+        logger.info('[OpenGrep] Checking for opengrep availability in WSL...')
+        check_tool_cmd = 'command -v opengrep || true'
         success, tool_path, stderr = run_wsl_command(check_tool_cmd)
 
         tool_name = None
         if success and tool_path and tool_path.strip():
-            # `command -v` returns the absolute path; use the basename as command
             tool_path = tool_path.strip().splitlines()[0]
             tool_name = os.path.basename(tool_path)
             logger.info(f'[OpenGrep] ✓ Found tool: {tool_name} at {tool_path}')
         else:
-            logger.error('[OpenGrep] ✗ Neither opengrep nor semgrep found in WSL PATH')
+            logger.error('[OpenGrep] ✗ opengrep not found in WSL PATH')
             return False, {
-                'error': 'opengrep/semgrep not found',
-                'message': 'Please install opengrep or semgrep in WSL and ensure it is in PATH',
+                'error': 'opengrep not found',
+                'message': 'Please install opengrep in WSL and ensure it is in PATH',
                 'scan_id': scan_id
             }
 
@@ -700,7 +699,7 @@ def run_opengrep_scan(repo_path, scan_id):
             if stdout and stdout.strip():
                 try:
                     parsed = json.loads(stdout)
-                    # semgrep/opengrep may return a dict with 'results' or a list
+                    # opengrep may return a dict with 'results' or a list
                     if isinstance(parsed, dict) and 'results' in parsed:
                         findings = parsed.get('results', []) or []
                     elif isinstance(parsed, list):
