@@ -991,6 +991,20 @@ function loadSettings() {
             console.error('Error loading PR scan settings:', error);
         });
 
+    fetch('/api/settings/ngrok')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                const subdomainInput = document.getElementById('ngrok_subdomain');
+                if (subdomainInput) {
+                    subdomainInput.value = data.ngrok_subdomain || '';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading ngrok settings:', error);
+        });
+
     const toggle = document.getElementById('pr-scan-toggle');
     if (toggle && !toggle.dataset.listenersAttached) {
         toggle.dataset.listenersAttached = 'true';
@@ -1015,6 +1029,32 @@ function loadSettings() {
                 console.error('Error saving PR scan setting:', error);
                 this.checked = !prScanEnabled;
                 showToast('Error saving PR scan setting', 'error');
+            });
+        });
+    }
+
+    const subdomainInput = document.getElementById('ngrok_subdomain');
+    if (subdomainInput && !subdomainInput.dataset.listenersAttached) {
+        subdomainInput.dataset.listenersAttached = 'true';
+        subdomainInput.addEventListener('change', function() {
+            const ngrokSubdomain = this.value.trim();
+            
+            fetch('/api/settings/ngrok', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ngrok_subdomain: ngrokSubdomain })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast('Ngrok subdomain saved', 'success');
+                } else {
+                    showToast('Failed to save ngrok subdomain', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving ngrok subdomain:', error);
+                showToast('Error saving ngrok subdomain', 'error');
             });
         });
     }

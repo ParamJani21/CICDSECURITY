@@ -477,6 +477,50 @@ def api_update_pr_scan_settings():
         }), 500
 
 
+@bp.route('/api/settings/ngrok', methods=['GET'])
+@require_login
+def api_get_ngrok_settings():
+    """API endpoint to get ngrok subdomain setting"""
+    try:
+        from modules.env_config import env_config
+        env_vars = env_config.read_env()
+        return jsonify({
+            'status': 'success',
+            'ngrok_subdomain': env_vars.get('NGROK_SUBDOMAIN', '')
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@bp.route('/api/settings/ngrok', methods=['POST'])
+@require_login
+def api_update_ngrok_settings():
+    """API endpoint to update ngrok subdomain setting"""
+    try:
+        from modules.env_config import env_config
+        
+        data = request.get_json()
+        ngrok_subdomain = data.get('ngrok_subdomain', '').strip()
+        
+        env_config.save_setting('NGROK_SUBDOMAIN', ngrok_subdomain)
+        
+        current_app.logger.info(f'Ngrok subdomain updated: {ngrok_subdomain}')
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Ngrok subdomain saved',
+            'ngrok_subdomain': ngrok_subdomain
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 @bp.route('/api/log', methods=['POST'])
 @require_login
 def api_client_log():

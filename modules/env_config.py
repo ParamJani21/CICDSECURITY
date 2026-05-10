@@ -139,6 +139,21 @@ class EnvConfigManager:
             'github_webhook_secret': env_vars.get('GITHUB_WEBHOOK_SECRET', '')
         }
     
+    def save_setting(self, key: str, value: str) -> bool:
+        """
+        Save a single setting to .env file
+        
+        Args:
+            key: Environment variable key
+            value: Environment variable value
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        env_vars = self.read_env()
+        env_vars[key] = str(value)
+        return self.write_env(env_vars)
+    
     def save_github_credentials(self, 
                                app_id: str = '',
                                app_name: str = '',

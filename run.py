@@ -81,17 +81,30 @@ def start_ngrok_tunnel(port=5000):
     """
     global ngrok_process, ngrok_tunnel_url
     
+    env_vars = load_env()
+    ngrok_subdomain = env_vars.get('NGROK_SUBDOMAIN', '')
+    
     try:
         print(f"🚀 Starting ngrok tunnel on port {port}...")
         
-        # Start ngrok tunnel with custom subdomain
-        ngrok_process = subprocess.Popen(
-            ['ngrok', 'http', '--url=tackier-porsha-nonfacetiously.ngrok-free.dev', str(port), '--log=stdout'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1
-        )
+        if ngrok_subdomain:
+            print(f"   Using custom subdomain: {ngrok_subdomain}")
+            ngrok_process = subprocess.Popen(
+                ['ngrok', 'http', f'--url={ngrok_subdomain}.ngrok-free.dev', str(port), '--log=stdout'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1
+            )
+        else:
+            print(f"   Using random subdomain (no custom subdomain set)")
+            ngrok_process = subprocess.Popen(
+                ['ngrok', 'http', str(port), '--log=stdout'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1
+            )
         
         print("   Waiting for tunnel to initialize...")
         time.sleep(3)  # Give ngrok time to start
