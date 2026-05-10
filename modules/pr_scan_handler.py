@@ -80,7 +80,7 @@ def _run_pr_scan_background(scan_id, repo_id, repo_name, repo_owner, repo_url,
     """
     from app import create_app
     from modules.github_status import set_github_status_check
-    from modules.control_apis import trigger_scan
+    from modules.control_apis import trigger_scan, cleanup_cloned_repo
     from modules.pr_comment import post_pr_comment, generate_scan_summary_comment
     from models.database import db, ScanHistory
     
@@ -187,6 +187,13 @@ def _run_pr_scan_background(scan_id, repo_id, repo_name, repo_owner, repo_url,
                     db.session.commit()
                     logger.error(f'Scan {scan_id} failed: {scan_result.get("message") if scan_result else "Unknown error"}')
                     update_status('error', 'Scan failed')
+            
+            clone_path = scan_result.get('clone_path') if scan_result else None
+            if clone_path:
+                logger.info(f'[PR Scan] Cleaning up cloned repo: {repo_owner}/{repo_name}')
+                cleanup_cloned_repo(repo_owner, repo_name)
+            
+            logger.info(f'[PR Scan] Scan {scan_id} fully completed')
 
     except Exception as e:
         logger.exception(f'Error in background PR scan: {e}')
@@ -201,3 +208,6 @@ def _run_pr_scan_background(scan_id, repo_id, repo_name, repo_owner, repo_url,
                 db.session.commit()
             
             update_status('error', f'Scan error: {str(e)[:50]}')
+        
+        logger.info(f'[PR Scan] Cleaning up cloned repo after exception: {repo_owner}/{repo_name}')
+        cleanup_cloned_repo(repo_owner, repo_name)
