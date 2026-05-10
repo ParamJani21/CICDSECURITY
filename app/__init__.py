@@ -79,22 +79,28 @@ def create_app():
             admin_exists = User.query.filter_by(role='admin').first()
             if not admin_exists:
                 try:
+                    app.logger.info('Creating default admin account...')
+                    password_hash = User.hash_password('Securepass123@#')
+                    app.logger.info(f'Password hash generated: {password_hash[:20]}...')
+
                     default_admin = User(
                         username='admin',
-                        password_hash=User.hash_password('Securepass123@#'),
+                        password_hash=password_hash,
                         is_first_login=True,
                         account_status='active',
                         role='admin'
                     )
                     db.session.add(default_admin)
-                    db.session.commit()
+                    db.session.flush()
 
                     prefs = UserPreferences(user_id=default_admin.id)
                     db.session.add(prefs)
                     db.session.commit()
-                    app.logger.info('Default admin created: admin / Securepass123@#')
+                    app.logger.info('✓ Default admin created: admin / Securepass123@#')
                 except Exception as admin_e:
-                    app.logger.warning(f'Default admin creation skipped: {admin_e}')
+                    app.logger.error(f'✗ Failed to create default admin: {str(admin_e)}')
+                    import traceback
+                    traceback.print_exc()
 
             app.logger.info('Database initialized successfully')
         except Exception as e:

@@ -66,7 +66,7 @@ trivy --version
 
 1. Go to: https://github.com/settings/apps/new
 2. Set name (e.g., "CICDSECURITY")
-3. Enter the random URL at the HomepageURL and webhookURL(TEMP)
+3. Enter the random URL at the HomepageURL and webhookURL(TEMP, we need to change it when we get the NGROCK URL or If you are planning to match it with the domain via HTTPS, then just enter the https://DOMAIN/github/webhook)
 4. Permissions:
    - Contents: Read
    - Pull requests: Read & Write
@@ -86,16 +86,17 @@ Access at: `http://localhost:5000`
 
 ### 3. Configure via Dashboard
 
-1. **Login** with your admin credentials (created during first setup):
-   - If no admin exists, you'll be prompted to create one on the login page
+1. **Login** with admin : Securepass123@# --> Don't worry we force to change this password.
 
 2. **Configure GitHub App Settings** (in Settings Tab):
    - **GitHub App ID** - From your GitHub App settings
    - **GitHub App Name** - The name you gave your app
    - **GitHub Secret Key** - Paste the entire private key (.pem file contents)
    - **Ngrok OAuth Token** - From ngrok.com dashboard
-   - **Ngrok Subdomain** - Optional custom subdomain for ngrok
+   - **Ngrok Subdomain** - From ngrok.com dashboard --> go to the domain and create one for the static. (if it is like `https://your-subdomain.ngrok.io` then just enter the `your-subdomain` in the setting field of Ngrok subdomain.)
    - **Webhook Secret** - Generate a random string for verification
+
+### RESTART THE PYTHON RUN.PY AGAIN TO PICK UP THE .ENV FILE CONFIGURATIONS (**MANDETORY**)
 
 3. **Configure GitHub Webhook**:
    - Go to your GitHub App settings > Webhooks
@@ -112,9 +113,6 @@ In Settings tab:
 - Enable toggle = All PRs auto-scan
 - Disable toggle = PRs logged but not scanned
 
-## Default Credentials
-
-On first run, you'll be prompted to create an admin account with your chosen username and password. No default password - you create it yourself!
 
 **Important: Change password after first login!**
 
@@ -126,19 +124,7 @@ On first run, you'll be prompted to create an admin account with your chosen use
 | **SBOM** | Trivy | Software Bill of Materials |
 | **SECRET** | TruffleHog | Secret/token detection |
 
-## API Endpoints
 
-```bash
-# Manual scan
-curl -X POST http://localhost:5000/api/repos/scan \
-  -H "Content-Type: application/json" \
-  -d '{"repo_id":"123","repo_name":"repo","repo_owner":"org","repo_url":"...","repo_branch":"main","scan_types":["sats","sbom","secret"]}'
-
-# Toggle PR scan
-curl -X POST http://localhost:5000/api/settings/pr-scan \
-  -H "Content-Type: application/json" \
-  -d '{"pr_scan_enabled": false}'
-```
 
 ## Troubleshooting
 
@@ -150,20 +136,6 @@ tail -f logs/app.log
 ### Verify tools installed
 ```bash
 which opengrep trufflehog trivy git
-```
-
-### Test webhook
-```bash
-# Generate signature
-SECRET="your_webhook_secret"
-PAYLOAD='{"action":"opened","pull_request":{"number":1}}'
-SIG=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" -hex | cut -d' ' -f2)
-
-curl -X POST http://localhost:5000/github/webhook \
-  -H "Content-Type: application/json" \
-  -H "X-Hub-Signature-256: sha256=$SIG" \
-  -H "X-GitHub-Event: pull_request" \
-  -d "$PAYLOAD"
 ```
 
 ## Project Structure
