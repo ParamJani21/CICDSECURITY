@@ -81,9 +81,10 @@ def get_github_app_token():
         if secret_key:
             logger.info(f"Secret Key starts with: {secret_key[:100]}...")
             logger.info(f"Secret Key ends with: ...{secret_key[-100:]}")
-            logger.info(f"Secret Key contains newlines: {'\\n' in secret_key}")
-            logger.info(f"Secret Key line count: {len(secret_key.split('\\n'))}")
-            logger.info(f"Reconstructed RSA key successfully (lines: {len(secret_key.split('\\n'))})")
+            has_newline = '\n' in secret_key
+            logger.info(f"Secret Key contains newlines: {has_newline}")
+            logger.info(f"Secret Key line count: {secret_key.count(chr(10)) + 1}")
+            logger.info(f"Reconstructed RSA key successfully (lines: {secret_key.count(chr(10)) + 1})")
             
             lines = secret_key.split('\n')
             logger.info(f"First line: '{lines[0]}'")
