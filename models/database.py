@@ -51,6 +51,9 @@ class User(db.Model):
     encrypted_github_key = db.Column(db.Text)  # Encrypted GitHub Private Key
     github_credentials_updated_at = db.Column(db.DateTime)  # When credentials were last updated
     
+    # PR Scan Settings
+    pr_scan_enabled = db.Column(db.Boolean, default=True)  # Toggle for automatic PR scanning
+    
     # User Metadata (for User Management)
     full_name = db.Column(db.String(255))  # User's full name
     department = db.Column(db.String(255))  # Department/team

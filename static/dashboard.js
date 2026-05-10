@@ -975,6 +975,49 @@ function loadSettings() {
     if (!form) return;
 
     sendClientLog('loadSettings_start');
+    
+    fetch('/api/settings/pr-scan')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                const toggle = document.getElementById('pr-scan-toggle');
+                if (toggle) {
+                    toggle.checked = data.pr_scan_enabled;
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading PR scan settings:', error);
+        });
+
+    const toggle = document.getElementById('pr-scan-toggle');
+    if (toggle && !toggle.dataset.listenersAttached) {
+        toggle.dataset.listenersAttached = 'true';
+        toggle.addEventListener('change', function() {
+            const prScanEnabled = this.checked;
+            
+            fetch('/api/settings/pr-scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pr_scan_enabled: prScanEnabled })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast('PR scanning ' + (prScanEnabled ? 'enabled' : 'disabled'), 'success');
+                } else {
+                    this.checked = !prScanEnabled;
+                    showToast('Failed to update PR scan setting', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving PR scan setting:', error);
+                this.checked = !prScanEnabled;
+                showToast('Error saving PR scan setting', 'error');
+            });
+        });
+    }
+    
     fetch('/api/settings/github')
         .then(response => response.json())
         .then(data => {

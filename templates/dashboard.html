@@ -264,6 +264,20 @@
             <div class="tab-content" id="settings-tab">
                 <div class="settings-container">
                     <div class="settings-grid">
+                        <!-- PR Scan Toggle -->
+                        <div class="settings-section" style="grid-column: 1 / -1;">
+                            <div class="pr-scan-setting">
+                                <div class="pr-scan-info">
+                                    <h4>Pull Request Scanning</h4>
+                                    <p>When enabled, all PRs are automatically scanned. When disabled, PRs are logged but not scanned.</p>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="pr-scan-toggle" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
                         <!-- GitHub Credentials -->
                         <div class="settings-section github-settings-section">
                             <h3>GitHub App Configuration</h3>

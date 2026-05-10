@@ -41,7 +41,7 @@
 .settings-section h3 {
     font-size: 1rem;
     margin-bottom: 1rem;
-    color: var(--text-primary);
+    color: #2563eb;
     padding-bottom: 0.8rem;
     border-bottom: 2px solid var(--border-color);
 }

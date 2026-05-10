@@ -557,6 +557,80 @@
     gap: 1.5rem !important;
 }
 
+/* ============ PR Scan Toggle ============ */
+.pr-scan-setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+}
+
+.pr-scan-info {
+    flex: 1;
+}
+
+.pr-scan-info h4 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1rem;
+    color: #2563eb;
+}
+
+.pr-scan-info p {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: #cbd5e1;
+    border-radius: 24px;
+    transition: 0.25s;
+}
+
+.slider::before {
+    content: "";
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    border-radius: 50%;
+    transition: 0.25s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.switch input:checked + .slider {
+    background-color: #22c55e;
+}
+
+.switch input:checked + .slider::before {
+    transform: translateX(20px);
+}
+
+.github-form {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 1.5rem !important;
+}
+
 .form-group {
     display: flex !important;
     flex-direction: column !important;

@@ -422,6 +422,61 @@ def api_save_github_credentials():
         }), 500
 
 
+@bp.route('/api/settings/pr-scan', methods=['GET'])
+@require_login
+def api_get_pr_scan_settings():
+    """API endpoint to get PR scan toggle setting"""
+    try:
+        user = get_current_user()
+        if not user:
+            return jsonify({
+                'status': 'error',
+                'message': 'User not authenticated'
+            }), 401
+        
+        return jsonify({
+            'status': 'success',
+            'pr_scan_enabled': user.pr_scan_enabled
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@bp.route('/api/settings/pr-scan', methods=['POST'])
+@require_login
+def api_update_pr_scan_settings():
+    """API endpoint to update PR scan toggle setting"""
+    try:
+        user = get_current_user()
+        if not user:
+            return jsonify({
+                'status': 'error',
+                'message': 'User not authenticated'
+            }), 401
+        
+        data = request.get_json()
+        pr_scan_enabled = data.get('pr_scan_enabled', True)
+        
+        user.pr_scan_enabled = pr_scan_enabled
+        db.session.commit()
+        
+        current_app.logger.info(f'PR scan toggle updated: {pr_scan_enabled} by user {user.id}')
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'PR scan {"enabled" if pr_scan_enabled else "disabled"}',
+            'pr_scan_enabled': user.pr_scan_enabled
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 @bp.route('/api/log', methods=['POST'])
 @require_login
 def api_client_log():
@@ -1305,9 +1360,26 @@ def handle_pr_webhook(payload):
         
         current_app.logger.info(f'PR #{pr_number} source branch (head): {repo_branch}')
         
+        # Get admin user for settings check
+        from models.database import User
+        admin_user = User.query.filter_by(role='admin').first()
+        pr_scan_enabled = admin_user.pr_scan_enabled if admin_user else True
+        
+        current_app.logger.info(f'PR scan enabled: {pr_scan_enabled}')
+        
         # Handle different PR actions
         if action in ['opened', 'reopened', 'synchronize']:
-            current_app.logger.info(f'PR #{pr_number} opened in {repo_owner}/{repo_name}, triggering scan...')
+            current_app.logger.info(f'PR #{pr_number} in {repo_owner}/{repo_name}, triggering scan...')
+            
+            if not pr_scan_enabled:
+                current_app.logger.info(f'PR scan is disabled - skipping scan for PR #{pr_number}')
+                return jsonify({
+                    'status': 'success',
+                    'message': f'PR #{pr_number} received, scanning disabled',
+                    'pr_number': pr_number,
+                    'repo': f'{repo_owner}/{repo_name}',
+                    'scan_status': 'skipped'
+                }), 200
             
             # Trigger security scan
             scan_result = trigger_pr_scan(
@@ -1327,33 +1399,6 @@ def handle_pr_webhook(payload):
             return jsonify({
                 'status': 'success',
                 'message': f'PR #{pr_number} opened, scan triggered',
-                'pr_number': pr_number,
-                'repo': f'{repo_owner}/{repo_name}',
-                'scan_id': scan_result.get('scan_id'),
-                'scan_status': 'pending'
-            }), 200
-        
-        elif action == 'synchronize':
-            current_app.logger.info(f'PR #{pr_number} synchronized (new commits), triggering re-scan...')
-            
-            # Trigger new scan for updated PR
-            scan_result = trigger_pr_scan(
-                repo_id=repo_id,
-                repo_name=repo_name,
-                repo_owner=repo_owner,
-                repo_url=repo_url,
-                pr_number=pr_number,
-                pr_title=pr_title,
-                pr_head_sha=pr_head_sha,
-                scan_types=['sats', 'sbom', 'secret'],
-                repo_branch=repo_branch
-            )
-            
-            current_app.logger.info(f'PR re-scan triggered: {scan_result.get("scan_id")}')
-            
-            return jsonify({
-                'status': 'success',
-                'message': f'PR #{pr_number} synchronized, re-scan triggered',
                 'pr_number': pr_number,
                 'repo': f'{repo_owner}/{repo_name}',
                 'scan_id': scan_result.get('scan_id'),
