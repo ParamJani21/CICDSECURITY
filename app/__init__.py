@@ -73,7 +73,29 @@ def create_app():
                 db.session.commit()
             except Exception as col_e:
                 app.logger.warning(f'Column migration note: {col_e}')
-            
+
+            # Create default admin if no admin exists
+            from models.database import User, UserPreferences
+            admin_exists = User.query.filter_by(role='admin').first()
+            if not admin_exists:
+                try:
+                    default_admin = User(
+                        username='admin',
+                        password_hash=User.hash_password('Securepass123@#'),
+                        is_first_login=True,
+                        account_status='active',
+                        role='admin'
+                    )
+                    db.session.add(default_admin)
+                    db.session.commit()
+
+                    prefs = UserPreferences(user_id=default_admin.id)
+                    db.session.add(prefs)
+                    db.session.commit()
+                    app.logger.info('Default admin created: admin / Securepass123@#')
+                except Exception as admin_e:
+                    app.logger.warning(f'Default admin creation skipped: {admin_e}')
+
             app.logger.info('Database initialized successfully')
         except Exception as e:
             app.logger.error(f'Failed to initialize database: {e}')
