@@ -1300,6 +1300,11 @@ def handle_pr_webhook(payload):
         
         current_app.logger.info(f'Pull Request {action}: {repo_owner}/{repo_name}#{pr_number} - {pr_title}')
         
+        pr_head = pr.get('head', {})
+        repo_branch = pr_head.get('ref', 'main')
+        
+        current_app.logger.info(f'PR #{pr_number} source branch (head): {repo_branch}')
+        
         # Handle different PR actions
         if action in ['opened', 'reopened', 'synchronize']:
             current_app.logger.info(f'PR #{pr_number} opened in {repo_owner}/{repo_name}, triggering scan...')
@@ -1313,7 +1318,8 @@ def handle_pr_webhook(payload):
                 pr_number=pr_number,
                 pr_title=pr_title,
                 pr_head_sha=pr_head_sha,
-                scan_types=['sats', 'sbom', 'secret']  # Default scan types
+                scan_types=['sats', 'sbom', 'secret'],
+                repo_branch=repo_branch
             )
             
             current_app.logger.info(f'PR scan triggered: {scan_result.get("scan_id")}')
@@ -1339,7 +1345,8 @@ def handle_pr_webhook(payload):
                 pr_number=pr_number,
                 pr_title=pr_title,
                 pr_head_sha=pr_head_sha,
-                scan_types=['sats', 'sbom', 'secret']
+                scan_types=['sats', 'sbom', 'secret'],
+                repo_branch=repo_branch
             )
             
             current_app.logger.info(f'PR re-scan triggered: {scan_result.get("scan_id")}')

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def trigger_pr_scan(repo_id, repo_name, repo_owner, repo_url, pr_number, pr_title, 
-                    pr_head_sha, scan_types=None, user_id=None):
+                    pr_head_sha, scan_types=None, user_id=None, repo_branch=None):
     """
     Trigger a PR scan in the background
     """
@@ -22,6 +22,9 @@ def trigger_pr_scan(repo_id, repo_name, repo_owner, repo_url, pr_number, pr_titl
         
         if scan_types is None:
             scan_types = ['sats', 'sbom', 'secret']
+        
+        if repo_branch is None:
+            repo_branch = 'main'
         
         scan_id = f"pr-{pr_number}-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
         
@@ -35,7 +38,7 @@ def trigger_pr_scan(repo_id, repo_name, repo_owner, repo_url, pr_number, pr_titl
             repo_id=str(repo_id),
             repo_name=repo_name,
             repo_owner=repo_owner,
-            repo_branch=f'pull/{pr_number}/merge',
+            repo_branch=repo_branch,
             is_pr_scan=True,
             pr_number=pr_number,
             pr_title=pr_title,
@@ -53,7 +56,7 @@ def trigger_pr_scan(repo_id, repo_name, repo_owner, repo_url, pr_number, pr_titl
         scan_thread = threading.Thread(
             target=_run_pr_scan_background,
             args=(scan_id, repo_id, repo_name, repo_owner, repo_url, pr_number, 
-                    pr_title, pr_head_sha, scan_types, user_id),
+                    pr_title, pr_head_sha, scan_types, user_id, repo_branch),
             daemon=True
         )
         scan_thread.start()
@@ -74,7 +77,7 @@ def trigger_pr_scan(repo_id, repo_name, repo_owner, repo_url, pr_number, pr_titl
 
 
 def _run_pr_scan_background(scan_id, repo_id, repo_name, repo_owner, repo_url, 
-                            pr_number, pr_title, pr_head_sha, scan_types, user_id):
+                            pr_number, pr_title, pr_head_sha, scan_types, user_id, repo_branch='main'):
     """
     Background worker function for PR scanning
     """
@@ -115,7 +118,7 @@ def _run_pr_scan_background(scan_id, repo_id, repo_name, repo_owner, repo_url,
                 repo_name=repo_name,
                 repo_owner=repo_owner,
                 repo_url=repo_url,
-                repo_branch='main',
+                repo_branch=repo_branch,
                 scan_types=scan_types,
                 is_pr_scan=True,
                 pr_number=pr_number,
