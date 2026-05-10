@@ -49,6 +49,10 @@ curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/inst
 # TruffleHog (secret scanning)
 git clone https://github.com/trufflesecurity/trufflehog.git
 cd trufflehog && go install
+
+# ngrok
+
+curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && echo "deb https://ngrok-agent.s3.amazonaws.com bookworm main" | sudo tee /etc/apt/sources.list.d/ngrok.list && sudo apt update && sudo apt install ngrok
 ```
 
 Verify tools:
@@ -58,6 +62,7 @@ opengrep --version
 slither --version
 trufflehog --version
 trivy --version
+ngrok --version
 ```
 
 ## Setup Flow
@@ -66,7 +71,7 @@ trivy --version
 
 1. Go to: https://github.com/settings/apps/new
 2. Set name (e.g., "CICDSECURITY")
-3. Enter the random URL at the HomepageURL and webhookURL(TEMP, we need to change it when we get the NGROCK URL or If you are planning to match it with the domain via HTTPS, then just enter the https://DOMAIN/github/webhook)
+3. Enter the random URL at the HomepageURL and webhookURL(TEMP, we need to change it when we get the NGROK URL or If you are planning to match it with the domain via HTTPS, then just enter the https://DOMAIN/github/webhook)
 4. Permissions:
    - Contents: Read
    - Pull requests: Read & Write
