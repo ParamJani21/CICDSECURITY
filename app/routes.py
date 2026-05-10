@@ -676,13 +676,15 @@ def api_export_report():
                 repo_full = scan.get('scan_id', 'Unknown Repository')
                 branch_display = 'N/A'
             
+            pr_badge = ' <span style="background:linear-gradient(135deg, #667eea, #764ba2);color:white;font-size:0.7rem;padding:2px 6px;border-radius:4px;font-weight:bold;">PR</span>' if scan.get('is_pr_scan') else ''
+            
             scan_sections_html += f'''
             <div class="scan-section">
                 <div class="scan-header">
                     <div class="scan-header-left">
                         <h3>📁 Scan: {scan.get('scan_id', 'N/A')}</h3>
                         <div class="scan-repo-info">
-                            <span>📦 <strong>{repo_full}</strong></span>
+                            <span>📦 <strong>{repo_full}{pr_badge}</strong></span>
                             <span>🌿 {branch_display}</span>
                         </div>
                     </div>

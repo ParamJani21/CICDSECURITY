@@ -701,6 +701,7 @@ function loadHistory() {
                     const medium = severity.MEDIUM || 0;
                     const low = severity.LOW || 0;
                     const total = scan.total_findings || 0;
+                    const prLabel = scan.is_pr_scan ? ' <span class="pr-label">PR</span>' : '';
                     
                     html += `
                         <div class="history-item" data-scan-id="${scan.scan_id}">
@@ -709,7 +710,7 @@ function loadHistory() {
                                     <input type="checkbox" class="scan-checkbox" data-scan-id="${scan.scan_id}" onclick="event.stopPropagation(); updateDeleteButton(); saveCheckboxState()">
                                 </div>
                                 <div class="col-time">${formatDate(scan.timestamp)}</div>
-                                <div class="col-repo">${scan.repository || 'Unknown'}</div>
+                                <div class="col-repo">${scan.repository || 'Unknown'}${prLabel}</div>
                                 <div class="col-branch">${branch}</div>
                                 <div class="col-total">${total}</div>
                                 <div class="col-severity">

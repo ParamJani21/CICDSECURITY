@@ -632,6 +632,18 @@ html, body {
 .severity-badge.medium { background: #ca8a04; color: white; }
 .severity-badge.low { background: #16a34a; color: white; }
 
+.pr-label {
+    display: inline-block;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
 /* View detail button - Unified purple theme */
 .view-detail-btn {
     background: linear-gradient(45deg, #667eea, #764ba2);
