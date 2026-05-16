@@ -44,7 +44,7 @@ class User(db.Model):
     last_login = db.Column(db.DateTime)
     
     # Role
-    role = db.Column(db.String(50), default='admin')  # admin, operator
+    role = db.Column(db.String(50), default='admin')  # admin, operator, viewer
     
     # GitHub Credentials (Encrypted)
     encrypted_github_app_id = db.Column(db.Text)  # Encrypted GitHub App ID

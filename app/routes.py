@@ -16,7 +16,7 @@ from modules.settings import (get_settings, get_integration_status,
                              get_github_credentials, save_github_credentials, 
                              get_github_credentials_for_user)
 from modules.scan_controller import trigger_scan
-from auth.decorators import require_login, require_admin
+from auth.decorators import require_login, require_admin, require_role
 from auth.utils import get_current_user
 
 bp = Blueprint('main', __name__)
@@ -1124,9 +1124,9 @@ def api_get_current_user():
 
 @bp.route('/api/users', methods=['GET'])
 @require_login
-@require_admin
+@require_role('admin', 'operator')
 def api_get_users():
-    """Get all users (admin only)"""
+    """Get all users (admin and operator)"""
     from models.database import User
     
     users = User.query.order_by(User.created_at.desc()).all()
@@ -1148,50 +1148,59 @@ def api_get_users():
 
 @bp.route('/api/users', methods=['POST'])
 @require_login
-@require_admin
+@require_role('admin', 'operator')
 def api_create_user():
-    """Create a new user (admin only)"""
+    """Create a new user (admin can create any, operator can create viewer only)"""
     from models.database import User
     from validators.input_validators import validate_username, validate_email, validate_password_strength
-    
+
+    # Get current user to check permissions
+    current_user = User.query.get(session.get('user_id'))
+
     data = request.get_json()
-    
+
     if not data:
         return jsonify({'status': 'error', 'message': 'No data provided'}), 400
-    
+
     username = data.get('username', '').strip()
     email = data.get('email', '').strip()
     password = data.get('password', '')
     role = data.get('role', 'operator')
     full_name = data.get('full_name', '').strip()
     department = data.get('department', '').strip()
-    
+
     # Validation
     if not username:
         return jsonify({'status': 'error', 'message': 'Username is required'}), 400
-    
+
     valid, msg = validate_username(username)
     if not valid:
         return jsonify({'status': 'error', 'message': msg}), 400
-    
+
     if not password:
         return jsonify({'status': 'error', 'message': 'Password is required'}), 400
-    
+
     valid, msg = validate_password_strength(password, username)
     if not valid:
         return jsonify({'status': 'error', 'message': msg}), 400
-    
+
     # Check if username exists
     if User.query.filter_by(username=username).first():
         return jsonify({'status': 'error', 'message': 'Username already exists'}), 400
-    
+
     # Check if email exists
     if email and User.query.filter_by(email=email).first():
         return jsonify({'status': 'error', 'message': 'Email already exists'}), 400
-    
-    # Validate role
-    if role not in ['admin', 'operator']:
-        role = 'operator'
+
+    # Validate role based on current user's permission
+    allowed_roles = []
+    if current_user.role == 'admin':
+        allowed_roles = ['admin', 'operator', 'viewer']
+    elif current_user.role == 'operator':
+        allowed_roles = ['viewer']  # Operator can only create viewers
+
+    if role not in allowed_roles:
+        role = allowed_roles[0] if allowed_roles else 'viewer'
     
     try:
         # Create user

@@ -2,3 +2,5 @@ logs/
 *.log
 *.json
 *.db
+flask_session/
+__pycache__/

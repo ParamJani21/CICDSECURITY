@@ -333,25 +333,46 @@
 
                                 <div class="form-group">
                                     <label for="ngrok_oauth_token">Ngrok OAuth Token</label>
-                                    <input 
-                                        type="password" 
-                                        id="ngrok_oauth_token" 
-                                        name="ngrok_oauth_token" 
-                                        placeholder="Enter your Ngrok OAuth Token"
-                                        class="form-input"
-                                    />
+                                    <div class="password-input-wrapper">
+                                        <input 
+                                            type="password" 
+                                            id="ngrok_oauth_token" 
+                                            name="ngrok_oauth_token" 
+                                            placeholder="Enter your Ngrok OAuth Token"
+                                            class="form-input"
+                                        />
+                                        <button type="button" class="password-toggle-btn" onclick="togglePassword('ngrok_oauth_token', this)">👁️</button>
+                                    </div>
                                 </div>
 
                                 <div class="form-group">
                                     <label for="github_webhook_secret">GitHub Webhook Secret</label>
-                                    <input 
-                                        type="password" 
-                                        id="github_webhook_secret" 
-                                        name="github_webhook_secret" 
-                                        placeholder="Enter your GitHub Webhook Secret"
-                                        class="form-input"
-                                    />
+                                    <div class="password-input-wrapper">
+                                        <input 
+                                            type="password" 
+                                            id="github_webhook_secret" 
+                                            name="github_webhook_secret" 
+                                            placeholder="Enter your GitHub Webhook Secret"
+                                            class="form-input"
+                                        />
+                                        <button type="button" class="password-toggle-btn" onclick="togglePassword('github_webhook_secret', this)">👁️</button>
+                                    </div>
                                     <small style="color: #94a3b8; margin-top: 4px; display: block;">Found in GitHub App Settings → Webhooks</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="flask_secret_key">Flask Secret Key</label>
+                                    <div class="password-input-wrapper">
+                                        <input 
+                                            type="password" 
+                                            id="flask_secret_key" 
+                                            name="flask_secret_key" 
+                                            placeholder="Enter new Flask Secret Key or leave empty to keep current"
+                                            class="form-input"
+                                        />
+                                        <button type="button" class="password-toggle-btn" onclick="togglePassword('flask_secret_key', this)">👁️</button>
+                                    </div>
+                                    <small style="color: #94a3b8; margin-top: 4px; display: block;">Required for session security. Leave empty to keep current key.</small>
                                 </div>
 
                                 <div class="form-actions">
@@ -416,7 +437,10 @@
                             </div>
                             <div class="form-group" id="password-group">
                                 <label for="user-password">Password</label>
-                                <input type="password" id="user-password">
+                                <div class="password-input-wrapper">
+                                    <input type="password" id="user-password" class="form-input">
+                                    <button type="button" class="password-toggle-btn" onclick="togglePassword('user-password', this)">👁️</button>
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label for="user-fullname">Full Name</label>
@@ -429,6 +453,7 @@
                             <div class="form-group">
                                  <label for="user-role">Role</label>
                                  <select id="user-role">
+                                     <option value="viewer">Viewer</option>
                                      <option value="operator">Operator</option>
                                      <option value="admin">Admin</option>
                                  </select>

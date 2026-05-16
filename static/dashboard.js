@@ -112,6 +112,7 @@ function loadCurrentUser() {
             if (data.status === 'success' && data.user) {
                 currentUser = data.user;
                 currentUserRole = data.user.role;
+                applyRoleRestrictions();
             }
         })
         .catch(error => {
@@ -122,6 +123,46 @@ function loadCurrentUser() {
 // Check if user can start scans (operator or admin only)
 function canStartScan() {
     return currentUserRole === 'operator' || currentUserRole === 'admin';
+}
+
+// Apply role-based UI restrictions
+function applyRoleRestrictions() {
+    console.log('Applying role restrictions for:', currentUserRole);
+
+    // Show Users tab for admin and operator (operator can create viewers)
+    const usersTab = document.querySelector('.tab-button[data-tab="users"]');
+    if (usersTab) {
+        usersTab.style.display = (currentUserRole !== 'viewer') ? '' : 'none';
+    }
+
+    // Show Settings tab for admin only
+    const settingsTab = document.querySelector('.tab-button[data-tab="settings"]');
+    if (settingsTab) {
+        settingsTab.style.display = (currentUserRole === 'admin') ? '' : 'none';
+    }
+
+    // Disable scan buttons for viewer
+    const scanButtons = document.querySelectorAll('.scan-btn, .scan-all-btn');
+    scanButtons.forEach(btn => {
+        btn.disabled = (currentUserRole === 'viewer');
+        btn.style.opacity = (currentUserRole === 'viewer') ? '0.5' : '';
+    });
+
+    // Hide add user button for operator and viewer
+    const addUserBtn = document.querySelector('.add-user-btn');
+    if (addUserBtn) {
+        addUserBtn.style.display = (currentUserRole === 'admin') ? '' : 'none';
+    }
+
+    // Update role dropdown in user modal based on current role
+    const roleSelect = document.getElementById('user-role');
+    if (roleSelect) {
+        if (currentUserRole === 'admin') {
+            roleSelect.innerHTML = '<option value="viewer">Viewer</option><option value="operator">Operator</option><option value="admin">Admin</option>';
+        } else if (currentUserRole === 'operator') {
+            roleSelect.innerHTML = '<option value="viewer">Viewer</option>';
+        }
+    }
 }
 
 
@@ -909,7 +950,15 @@ function renderFindings(scanId, data, container) {
     
     console.log(`  ✅ Rendering ${findings.length} findings`);
     let findingsHtml = '<h5>All Findings from merged.json (' + findings.length + ')</h5>';
-    
+
+    // Sort by severity: CRITICAL > HIGH > MEDIUM > LOW > others
+    const severityOrder = { 'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3, 'WARNING': 4, 'INFO': 5 };
+    findings.sort((a, b) => {
+        const orderA = severityOrder[a.severity?.toUpperCase()] ?? 99;
+        const orderB = severityOrder[b.severity?.toUpperCase()] ?? 99;
+        return orderA - orderB;
+    });
+
     findings.forEach((f, idx) => {
         const severityClass = (f.severity || '').toLowerCase();
         const cwe = (f.cwe || []).join(', ');
@@ -1554,7 +1603,9 @@ function loadUsers() {
      fetch('/api/users', { credentials: 'include' })
      .then(response => {
          if (response.status === 403) {
-             showToast('Access denied. Admin only.', 'error');
+             response.json().then(err => {
+                 showToast(err.error || 'Access denied', 'error');
+             });
              return;
          }
          return response.json();
@@ -1747,4 +1798,21 @@ function confirmExport() {
     
     closeExportModal();
     window.location.href = '/api/export-report' + (params.toString() ? '?' + params.toString() : '');
+}
+
+// Toggle password visibility
+function togglePassword(inputId, btnElement) {
+    console.log('togglePassword called for:', inputId);
+    const input = document.getElementById(inputId);
+    if (!input) {
+        console.log('Input not found:', inputId);
+        return;
+    }
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (btnElement) btnElement.innerHTML = '👁️‍🗨️';
+    } else {
+        input.type = 'password';
+        if (btnElement) btnElement.innerHTML = '👁️';
+    }
 }

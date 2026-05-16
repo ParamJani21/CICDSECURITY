@@ -16,9 +16,7 @@ def create_app():
     # Generate or load SECRET_KEY from environment
     SECRET_KEY = os.environ.get('FLASK_SECRET_KEY')
     if not SECRET_KEY:
-        # Generate a random key for development (not suitable for production)
         SECRET_KEY = secrets.token_hex(32)
-        app.logger.warning('No FLASK_SECRET_KEY in environment, generated temporary key')
     
     app.config['SECRET_KEY'] = SECRET_KEY
     

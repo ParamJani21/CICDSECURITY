@@ -8,6 +8,53 @@ from flask import session, jsonify, request, render_template
 from datetime import datetime
 from models.database import db, User, Session
 
+
+# Role hierarchy: admin > operator > viewer
+ROLE_LEVELS = {'admin': 3, 'operator': 2, 'viewer': 1}
+
+
+def get_user_role_level(user):
+    """Get role level for a user"""
+    if not user:
+        return 0
+    return ROLE_LEVELS.get(user.role, 0)
+
+
+def can_manage_users(user):
+    """Admin can manage all users, Operator can create viewers only"""
+    if not user:
+        return False
+    return user.role in ['admin', 'operator']
+
+
+def can_create_user(user, target_role):
+    """Check if user can create another user with specific role"""
+    if not user:
+        return False
+    user_level = get_user_role_level(user)
+    target_level = ROLE_LEVELS.get(target_role, 0)
+    # Can only create users with role level <= your own
+    return user_level >= target_level and user_level >= 2
+
+
+def can_manage_settings(user):
+    """Admin can manage settings, Operator and Viewer cannot"""
+    if not user:
+        return False
+    return user.role == 'admin'
+
+
+def can_start_scan(user):
+    """Admin and Operator can start scans, Viewer cannot"""
+    if not user:
+        return False
+    return user.role in ['admin', 'operator']
+
+
+def can_export_report(user):
+    """All authenticated roles can export reports"""
+    return user is not None
+
 def require_login(f):
     """
     Decorator to require user to be logged in

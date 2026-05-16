@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-**CICDSECURITY** is a Flask-based security scanning orchestration dashboard for GitHub repositories. It automates security scans by integrating multiple security tools (OpenGrep, Slither, Trivy, TruffleHog) and provides a web dashboard for managing scans and viewing results.
+**CICDSECURITY** is a Flask-based security scanning orchestration dashboard for GitHub repositories. It automates security scans by integrating multiple security tools (OpenGrep, Slither, Trivy, TruffleHog) and provides a web dashboard for managing scans and viewing results. 
+
+## WE ARE USING THE OPENGREP, SO DON"T EVER MENTION THE SEMGREP...!
 
 ### Key Capabilities
 - **GitHub App Integration** - Authenticate and scan repositories via GitHub App

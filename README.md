@@ -25,13 +25,13 @@ A Flask-based security scanning dashboard that automates security scans for GitH
 ### 1. Clone/Download the Project
 
 ```bash
-cd /path/to/CICDSECURITY
+cd /CICDSECURITY
 ```
 
 ### 2. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt --break
 ```
 
 ### 3. Install Security Tools (WSL/Linux)
@@ -67,8 +67,15 @@ ngrok --version
 
 ## Setup Flow
 
-### 1. Create GitHub App
+### 1. Run the run.py
 
+```bash
+python3 run.py
+```
+
+* It will guide you how to do all the things, if any doubts here is the more detailed guide present.
+
+### GITHUB APPLICATION SETUP
 1. Go to: https://github.com/settings/apps/new
 2. Set name (e.g., "CICDSECURITY")
 3. Enter the random URL at the HomepageURL and webhookURL(TEMP, we need to change it when we get the NGROK URL or If you are planning to match it with the domain via HTTPS, then just enter the https://DOMAIN/github/webhook)
@@ -81,17 +88,12 @@ ngrok --version
 6. Create Gihub app.
 7. Find private key generation...and generate private key (download .pem file)
 
-### 2. Run the Application
-
-```bash
-python3 run.py
-```
-
 Access at: `http://localhost:5000`
 
-### 3. Configure via Dashboard
+### 2. Configure via Dashboard
 
 1. **Login** with admin : Securepass123@# --> Don't worry we force to change this password.
+
 
 2. **Configure GitHub App Settings** (in Settings Tab):
    - **GitHub App ID** - From your GitHub App settings
@@ -101,7 +103,7 @@ Access at: `http://localhost:5000`
    - **Ngrok Subdomain** - From ngrok.com dashboard --> go to the domain and create one for the static. (if it is like `https://your-subdomain.ngrok.io` then just enter the `your-subdomain` in the setting field of Ngrok subdomain.)
    - **Webhook Secret** - Generate a random string for verification
 
-### RESTART THE PYTHON RUN.PY AGAIN TO PICK UP THE .ENV FILE CONFIGURATIONS (**MANDETORY**)
+### RESTART THE PYTHON RUN.PY AGAIN if you have setup it from the dashboard TO PICK UP THE .ENV FILE CONFIGURATIONS (**MANDETORY**)
 
 3. **Configure GitHub Webhook**:
    - Go to your GitHub App settings > Webhooks
