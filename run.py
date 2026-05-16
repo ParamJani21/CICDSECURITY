@@ -73,17 +73,10 @@ def ask_ngrok_setup():
     if existing_token and existing_subdomain:
         return existing_token, existing_subdomain
 
-    # Case 2: Token exists but no subdomain - ask for subdomain
+    # Case 2: Token exists but no subdomain - create new domain
     if existing_token and not existing_subdomain:
-        print("\n[!] Subdomain not set")
-        print("[?] Enter domain prefix (e.g., my-app): ", end="")
-        subdomain = input().strip()
-        if not subdomain:
-            print("[!] Subdomain required")
-            return None, None
-        save_env_var('NGROK_SUBDOMAIN', subdomain)
-        print(f"[✓] Saved (will use: {subdomain}.ngrok-free.app)\n")
-        return existing_token, subdomain
+        print("\n[!] Domain not set - Let's create one!")
+        return ask_new_domain(existing_token)
 
     # Case 3: No token - run full wizard
     print("\n[!] NGROK_OAUTH_TOKEN not found")
@@ -118,27 +111,42 @@ def ask_ngrok_setup():
         print("[!] No token, skipping ngrok")
         return None, None
 
-    # Get subdomain (try simple, if fails guide to reserve)
+    # Now create new domain
+    return ask_new_domain(token)
+
+
+def ask_new_domain(token):
+    """Ask user to create NEW domain with detailed steps"""
     print("""
-[?] ENTER DOMAIN:
-    Option A: If you already have a reserved domain - enter the prefix (e.g., my-app)
-    Option B: Enter ANY name - we'll try to use it directly (ngrok will auto-reserve if available)
+╔══════════════════════════════════════════════════════════════════════════╗
+║                    🔐 CREATE YOUR NGROK DOMAIN 🔐                        ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  ⚠️  IMPORTANT: You MUST create a new domain now!                        ║
+║                                                                          ║
+║  STEP BY STEP:                                                          ║
+║  ─────────────                                                          ║
+║  1. Click this link → https://dashboard.ngrok.com/cloud-edge/domains   ║
+║  2. Click "New Domain" button (top right)                                ║
+║  3. Enter domain name (e.g., my-security-app) in the popup              ║
+║  4. Click "Continue" to reserve it                                       ║
+║  5. Come back here and enter the prefix (my-security-app)                ║
+╚══════════════════════════════════════════════════════════════════════════╝
 """)
     try:
         webbrowser.open('https://dashboard.ngrok.com/cloud-edge/domains')
     except:
         pass
     
-    print("[?] Domain prefix (e.g., my-app): ", end="")
+    print("\n[?] Enter your NEW domain prefix: ", end="")
     subdomain = input().strip()
     
     if not subdomain:
-        print("[!] Subdomain required for permanent webhook URL")
+        print("[!] Domain required for permanent webhook URL")
         return None, None
     
     save_env_var('NGROK_OAUTH_TOKEN', token)
     save_env_var('NGROK_SUBDOMAIN', subdomain)
-    print(f"[✓] Saved (will use: {subdomain}.ngrok-free.app)\n")
+    print(f"[✓] Saved! Your domain: {subdomain}.ngrok-free.app\n")
 
     return token, subdomain
 
@@ -201,29 +209,18 @@ def start_ngrok_tunnel(port=5000, subdomain=None):
             )
 
         print("   Waiting for tunnel to initialize...")
+        time.sleep(3)
         
-        # Wait for ngrok API to become available with retries
-        max_retries = 10
-        retry_delay = 2
-        ngrok_tunnel_url = None
-        
-        for attempt in range(max_retries):
-            time.sleep(retry_delay)
-            try:
-                response = requests.get('http://localhost:4040/api/tunnels', timeout=5)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get('tunnels'):
-                        for tunnel in data['tunnels']:
-                            if tunnel.get('proto') == 'https':
-                                ngrok_tunnel_url = tunnel.get('public_url')
-                                break
-                        if ngrok_tunnel_url:
-                            break
-            except requests.exceptions.ConnectionError:
-                print(f"   ⏳ Attempt {attempt + 1}/{max_retries}: ngrok API not ready yet...")
-            except Exception as e:
-                print(f"   ⚠️  Attempt {attempt + 1}: {str(e)}")
+        try:
+            response = requests.get('http://localhost:4040/api/tunnels', timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('tunnels'):
+                    for tunnel in data['tunnels']:
+                        if tunnel.get('proto') == 'https':
+                            ngrok_tunnel_url = tunnel.get('public_url')
+        except:
+            pass
         
         if ngrok_tunnel_url:
             print(f"✅ ngrok tunnel started successfully!")
