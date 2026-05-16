@@ -28,13 +28,29 @@ A Flask-based security scanning dashboard that automates security scans for GitH
 cd /CICDSECURITY
 ```
 
-### 2. Install Dependencies
+### 2. Quick Setup (Recommended)
+
+Run the automated setup script - it creates virtual environment, installs dependencies, and all security tools:
 
 ```bash
-pip install -r requirements.txt --break
+chmod +x setup.sh
+./setup.sh
 ```
 
-### 3. Install Security Tools (WSL/Linux)
+### 3. Manual Installation (Alternative)
+
+If you prefer manual installation:
+
+```bash
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt --break-system-packages
+```
+
+#### Install Security Tools (WSL/Linux)
 
 ```bash
 # OpenGrep (static analysis)
