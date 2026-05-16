@@ -322,6 +322,7 @@ def main():
 [?] SETUP GITHUB APP:
     1. Creating GitHub App with pre-filled details
     2. Then configure permissions and webhook
+    IF NOT THEN VISIT THIS : https://github.com/settings/apps/new?name=CICDSECURITY&description=Security+Scanning+Dashboard&url={url}&hook_active=true&hook_url={webhook_url}
 """)
                     try:
                         webbrowser.open(f'https://github.com/settings/apps/new?name=CICDSECURITY&description=Security+Scanning+Dashboard&url={url}&hook_active=true&hook_url={webhook_url}')
