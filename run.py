@@ -146,7 +146,7 @@ def ask_new_domain(token):
     
     save_env_var('NGROK_OAUTH_TOKEN', token)
     save_env_var('NGROK_SUBDOMAIN', subdomain)
-    print(f"[✓] Saved! Your domain: {subdomain}.ngrok-free.app\n")
+    print(f"[✓] Saved! Your domain: {subdomain}.ngrok-free.dev\n")
 
     return token, subdomain
 
@@ -192,7 +192,7 @@ def start_ngrok_tunnel(port=5000, subdomain=None):
         if subdomain:
             print(f"   Using subdomain: {subdomain}")
             ngrok_process = subprocess.Popen(
-                ['ngrok', 'http', f'--url={subdomain}.ngrok-free.app', str(port), '--log=stdout'],
+                ['ngrok', 'http', f'--url={subdomain}.ngrok-free.dev', str(port), '--log=stdout'],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
